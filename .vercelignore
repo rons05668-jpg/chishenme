@@ -15,3 +15,4 @@ vite.config.js.timestamp-*.mjs
 # 日志与部署包
 *.log
 today-eat-what-vercel.zip
+today-eat-what-static.zip

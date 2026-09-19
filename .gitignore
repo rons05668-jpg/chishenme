@@ -17,6 +17,7 @@ vite.config.js.timestamp-*.mjs
 
 # 部署包
 today-eat-what-vercel.zip
+today-eat-what-static.zip
 
 # 编辑器 / 系统
 .DS_Store

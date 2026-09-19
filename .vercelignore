@@ -1,0 +1,17 @@
+# 上传给 Vercel 时忽略这些内容（部署包同样排除）
+node_modules
+dist
+.vercel
+.workbuddy-ai
+
+# 本地环境变量（含 VERCEL_OIDC_TOKEN 等凭据，绝不能上传）
+.env
+.env.*
+!.env.example
+
+# 本地构建产生的 Vite 临时文件
+vite.config.js.timestamp-*.mjs
+
+# 日志与部署包
+*.log
+today-eat-what-vercel.zip

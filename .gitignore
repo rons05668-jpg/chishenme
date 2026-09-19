@@ -1,0 +1,35 @@
+# 依赖
+node_modules/
+
+# 工作区本地数据（对话记忆等，不随仓库分发）
+.workbuddy-ai/
+
+# 构建产物
+dist/
+dist-ssr/
+
+# Vite 运行期临时文件
+vite.config.js.timestamp-*.mjs
+*.local
+
+# Vercel 本地关联信息
+.vercel
+
+# 部署包
+today-eat-what-vercel.zip
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.vercel
+.env*

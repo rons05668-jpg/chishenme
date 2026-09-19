@@ -4,6 +4,8 @@
 
 纯前端应用，无需后端与数据库，所有记录只保存在你自己的浏览器里，并支持添加到 iPhone 主屏当 App 用。
 
+**源码仓库**：https://github.com/rons05668-jpg/chishenme
+
 **在线地址（Vercel 生产环境）**：https://chishenme-two.vercel.app
 
 - 项目：`ashby3/chishenme`（Vercel 团队 `ashby3`），生产部署状态 `● Ready`

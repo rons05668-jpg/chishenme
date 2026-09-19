@@ -1,0 +1,16 @@
+# 统一换行符：仓库内一律存 LF，避免在 Windows 编辑后推送到 Linux 构建环境（Vercel）出问题
+* text=auto eol=lf
+
+# 明确声明二进制文件，避免被当作文本转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+
+# 以下文件保持原样不参与换行符转换
+package-lock.json -text
+*.svg text

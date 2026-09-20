@@ -26,6 +26,40 @@ export const RESULT_QUOTES = [
   '别再刷了，就是它。',
 ]
 
+/** 饮品结果卡片底部的一句话 */
+export const DRINK_QUOTES = [
+  '就这杯了，别再纠结。',
+  '喝完这杯再说别的。',
+  '命运替你点好了，拿着。',
+  '这杯下肚，今天就算圆满。',
+  '别翻了，就它。',
+  '冰的也好，热的也罢，先喝了。',
+]
+
+/** 饮品页副标题 */
+export const DRINK_TAGLINES = [
+  '饭都定了，喝的总不能还纠结。',
+  '一杯的选择，也别为难自己。',
+  '让转盘替你点单。',
+  '渴了就别忍，抽一个。',
+  '今天的快乐水，交给运气。',
+]
+
+/** 饮品页空结果提示 */
+export const EMPTY_DRINK_POOL_HINT = '这个组合下没有可选饮品，放宽一个条件再试试。'
+export const EMPTY_DRINK_RESULT_HINT = '点上面的按钮，让命运替你选一杯。'
+
+/** 饮品时段问候语 */
+export function drinkTimeGreeting(date = new Date()) {
+  const hour = date.getHours()
+  if (hour < 5) return '这个点该喝水了'
+  if (hour < 10) return '早上一杯醒神'
+  if (hour < 14) return '饭后来点什么'
+  if (hour < 17) return '下午茶时间'
+  if (hour < 21) return '晚饭配一杯'
+  return '宵夜配点喝的'
+}
+
 /** 筛选选项：直接由数据层的枚举派生，保证与食物数据永远一致 */
 export const TASTE_OPTIONS = [...TASTES, '随机']
 export const CATEGORY_OPTIONS = [...CATEGORIES, '随机']

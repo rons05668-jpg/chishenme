@@ -2,6 +2,8 @@ import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
 import Toast from './components/Toast'
+import UpdateBanner from './components/UpdateBanner'
+import DrinkPage from './pages/DrinkPage'
 import FavoritesPage from './pages/FavoritesPage'
 import HistoryPage from './pages/HistoryPage'
 import HomePage from './pages/HomePage'
@@ -30,6 +32,7 @@ function AppLayout() {
               <Route path="/" element={<HomePage />} />
               <Route path="/random" element={<RandomPage />} />
               <Route path="/wheel" element={<WheelPage />} />
+              <Route path="/drink" element={<DrinkPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/favorites" element={<FavoritesPage />} />
               <Route path="*" element={<HomePage />} />
@@ -39,6 +42,7 @@ function AppLayout() {
       </div>
 
       {immersive ? null : <BottomNav />}
+      <UpdateBanner />
       <Toast />
     </MotionConfig>
   )

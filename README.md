@@ -6,28 +6,12 @@
 
 **源码仓库**：https://github.com/rons05668-jpg/chishenme
 
-**在线地址（Vercel 生产环境）**：https://chishenme-two.vercel.app
+**在线地址**：https://chishenme-two.vercel.app
 
-- 项目：`ashby3/chishenme`（Vercel 团队 `ashby3`），生产部署状态 `● Ready`
-- 重新部署：在项目根目录执行 `npx vercel deploy --prod --yes`（同一项目会复用该域名并覆盖线上内容）
-- ⚠️ **该地址在中国内地无法访问**，原因见下方「中国内地访问」章节
-
-**在线地址（中国内地可用）**：https://4d06f6539e1e4b3aa3b025dae85c48cb.sg2.agentos-app.run
-
-- 托管在**腾讯云新加坡节点**（`43.160.144.32`，AS132203 Tencent Cloud），内地直连实测 **6/6 稳定、约 0.43–0.49 秒**，功能验收 **10/10 通过**
-- 由内置发布能力生成，可在「设置—数据管理—我发布的应用」中管理
-- ⚠️ **长期可用性不保证**：这是面向预览与分享的托管环境，不是带 SLA 的商业 CDN 产品，也不支持自定义域名、缓存策略与监控告警。**把它当临时分享地址用；要长期对外运营，请按下表迁移到正式托管**
-
-### 迁移到正式托管（已备好产物）
-
-`today-eat-what-static.zip` 是纯静态产物包（10 个文件、约 140 KB），**解压后直接上传到任意静态托管的根目录即可**，无需构建、无需 Node 环境：
-
-```text
-index.html  sw.js  manifest.webmanifest  favicon.svg
-assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
-```
-
-因为项目是纯前端、无后端、数据全在浏览器 `localStorage`，迁移只是「换个地方放文件」，**不需要改任何代码**。
+- 生产分支为 `main`：仓库 `rons05668-jpg/chishenme` 的 `main` 分支推送后由 Vercel 自动部署，该域名指向生产环境
+- Vercel 项目名与所属团队/账号归属**未在本仓库中记录**，请在 Vercel 控制台自行确认
+- 重新部署：在项目根目录执行 `npx vercel deploy --prod`（同一项目会复用该域名并覆盖线上内容）
+- ⚠️ 在中国内地访问该域名可能不稳定或不可达，详见下方「中国内地访问」章节
 
 > 提示：`chishenme.vercel.app` 已被其他 Vercel 用户占用，因此实际域名自动带上了后缀，为 `chishenme-two.vercel.app`。
 
@@ -35,39 +19,33 @@ assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
 
 ## 中国内地访问
 
-### 实测结论
+> **本节为历史观察，未持续验证，请自行实测。**
+>
+> 下面提到的连通性结论来自过去某一次在特定网络环境下的手工观察，既不代表普遍情况，也不构成对当前状态的承诺。网络链路、DNS 解析与各托管平台的策略都会变化，**请以你自己的实测结果为准**。
 
-**Vercel 在中国内地被网络层封锁，这不是配置问题，Vercel 侧任何设置都改不了。**
+经验上，面向内地用户时通常会遇到两类差异：
 
-在本机（内地网络）用「不走代理的直连」实测：
+- **Vercel 等海外平台的默认域名**：部分内地网络环境下解析或连接不稳定，可能超时或无法打开
+- **新加坡 / 香港等跨境节点**：能否连通、延迟高低，在不同运营商和不同时段差别较大
 
-| 检测项 | 结果 |
-| --- | --- |
-| `*.vercel.app` 的 DNS 解析 | 被污染——返回 `31.13.96.195`、`185.45.6.103` 等 **Facebook/Meta 的 IP 段**（IPv6 里 `face:b00c` 是 Meta 的标志），而非 Vercel 真实 IP |
-| 直连 Vercel 官方 IP `76.76.21.21` | **0.14 秒立即失败**（IP 层被阻断，典型 RST） |
-| 直连 `https://chishenme-two.vercel.app/` | `net::ERR_CONNECTION_TIMED_OUT`（15 秒超时） |
-| 对照：直连 `https://www.qq.com/` | 0.19 秒连通 |
-| 对照：直连内置发布网址 | 0.43 秒，6/6 成功 |
+因此选型时建议优先考虑「是否需要内地用户稳定访问」这一条：
 
-也就是说：**域名被污染 + IP 被阻断**同时存在。所以给 Vercel 绑自有域名也救不了——底层 IP 一样连不上。
+| 方案 | 需要 ICP 备案 | 说明 |
+| --- | --- | --- |
+| **EdgeOne Pages（腾讯云）** | 默认域名不需要，绑自有域名需要 | 国内 CDN，有免费额度 |
+| **国内云对象存储 + CDN** | ✅ **必须备案** | 腾讯云 COS / 阿里云 OSS + CDN，最正规，但需备案周期 |
+| **香港 / 新加坡轻量服务器** | 不需要 | 免备案，但跨境链路会波动 |
+| **Cloudflare Pages** | 不需要 | 免费版在内地连通性不稳定；中国大陆节点仅企业版 |
+| **Vercel** | 不需要 | 本项目的生产环境；若内地访问不畅，可另配一条内地线路 |
 
-### 可选方案
-
-| 方案 | 内地可访问 | 长期稳定性 | 需要备案 | 说明 |
-| --- | --- | --- | --- | --- |
-| **内置发布网址（当前已用）** | ✅ 实测 0.43s | ⚠️ **不承诺长期** | ❌ 不需要 | 腾讯云新加坡节点；适合临时分享，不适合长期对外运营 |
-| **EdgeOne Pages（腾讯云）** | ✅ | ✅ 正式产品 | ❌ 默认域名不需要 | 国内 CDN，有免费额度；绑自有域名则需备案 |
-| **国内云对象存储 + CDN** | ✅ 最快 | ✅ 最稳 | ✅ **必须 ICP 备案** | 腾讯云 COS / 阿里云 OSS + CDN，最正规，备案周期约 1–20 个工作日 |
-| **香港 / 新加坡轻量服务器** | ⚠️ 一般 | ✅ | ❌ 不需要 | 免备案，但跨境链路会波动；约 ¥24–40/月 |
-| **Cloudflare Pages** | ⚠️ 不稳定 | ✅ | ❌ 不需要 | 免费版在内地（尤其电信）时通时不通；中国大陆节点仅企业版 |
-| **Vercel** | ❌ 不可用 | ✅ | — | 保留作为海外入口即可 |
+关于长期可用性：无论选哪种托管，都建议把它当作需要持续观测的服务，而不是上线后就固定不变的结论。
 
 ### 推荐做法：双线部署
 
-项目是**纯静态产物**（无后端、数据全在浏览器 localStorage），所以两边共用同一份 `dist/`，**零代码改动**：
+项目是**纯静态产物**（无后端、数据全在浏览器 localStorage），所以两边可以共用同一份 `dist/` 构建产物，**零代码改动**：
 
 - **海外**：Vercel（`chishenme-two.vercel.app`）
-- **内地**：内置发布网址 / EdgeOne Pages / 已备案的国内 CDN
+- **内地**：按上表选一个方案，把 `npm run build` 产出的 `dist/` 原样上传即可
 
 如果后续要绑自己的域名给内地用户用，**ICP 备案是硬门槛**——在中国内地提供网站服务必须备案，这一步无法绕过。
 
@@ -209,8 +187,13 @@ today-eat-what/
 ├── package-lock.json              # 锁定依赖版本，供 CI/Vercel 做确定性安装
 ├── vite.config.js                 # 开发/预览 host 与端口、构建输出目录、allowedHosts
 ├── vercel.json                    # Vercel 构建与缓存配置（锁定 framework/build/output）
+├── playwright.config.js           # 浏览器回归测试配置（Chromium 手机视口）
 ├── .vercelignore                  # 上传 Vercel 时忽略 node_modules、dist 等
+├── .nvmrc                         # Node 主版本（`22`），与 package.json engines 一致
 ├── .gitignore
+├── .github/
+│   ├── dependabot.yml             # 定期检查 npm 与 Actions 更新
+│   └── workflows/ci.yml           # main 推送与 PR：安装、数据自检、依赖审计、构建、浏览器测试
 ├── README.md
 ├── public/                        # 静态资源，构建时原样拷贝到 dist/
 │   ├── favicon.svg
@@ -222,13 +205,16 @@ today-eat-what/
 │       ├── icon-512.png
 │       └── icon-maskable-512.png  # Android 自适应图标（留安全区）
 ├── scripts/
-│   ├── check-data.cjs             # 食物数据与推荐算法自检（21 项检查）
+│   ├── check-data.cjs             # 食物数据、推荐算法、存储与备份自检（25 项检查）
 │   ├── generate-icons.cjs         # 纯 Node 生成上述 PNG 图标（无第三方依赖）
 │   └── serve.cjs                  # 生产启动入口：按需构建 + 以 0.0.0.0:$PORT 提供服务
+├── tests/
+│   └── core.spec.js               # Playwright 回归测试（随机、收藏、历史、忌口、转盘、离线）
 └── src/
     ├── main.jsx                   # 挂载 React、引入样式、注册 Service Worker
     ├── App.jsx                    # HashRouter + 路由表 + 页面切换动画
     ├── components/
+    │   ├── BackupPanel.jsx        # 本地数据备份面板（导出 / 导入 JSON）
     │   ├── BottomNav.jsx          # 底部导航（5 个 Tab）
     │   ├── FilterPanel.jsx        # 条件筛选面板（预算/口味/类型/场景）
     │   ├── FoodResultCard.jsx     # 推荐结果大卡片
@@ -236,16 +222,19 @@ today-eat-what/
     │   ├── ResultSheet.jsx        # 转盘结果的底部弹出面板
     │   ├── Toast.jsx              # 全局轻提示
     │   ├── TopBar.jsx             # 子页面顶部栏（返回 + 标题）
+    │   ├── UpdateBanner.jsx       # 「有新版本」提示条（订阅 pwaUpdate 状态）
     │   └── Wheel.jsx              # SVG 幸运转盘
     ├── data/
     │   ├── foods.js               # 原数据与统一导出 + 枚举 + 工具函数
     │   └── food-metadata.js       # 新增食物与独立分类、时段、忌口标注
     ├── hooks/
-    │   └── useDecider.js          # 「帮我决定」的翻牌动画 + 加权抽取流程
+    │   ├── useDecider.js          # 「帮我决定」的翻牌动画 + 加权抽取流程
+    │   └── useMediaQuery.js       # 响应式媒体查询订阅
     ├── lib/
     │   ├── content.js             # 文案（副标题/结果语录）、筛选选项、时段问候语
     │   ├── filters.js             # 筛选默认值与转换工具
     │   ├── picker.js              # 筛选、权重计算、加权抽样、历史分组
+    │   ├── pwaUpdate.js           # PWA 新版本状态广播（供界面订阅并提示更新）
     │   └── storage.js             # localStorage / sessionStorage 封装
     ├── pages/
     │   ├── FavoritesPage.jsx
@@ -265,7 +254,7 @@ today-eat-what/
 
 ## 本地运行
 
-**环境要求**：Node.js 22.22+（22.x），使用 `.nvmrc` 选择 Node 22。生产构建和 CI 使用同一版本系列。
+**环境要求**：Node.js `>=22.22.0 <23`（`package.json` 的 `engines` 字段）。仓库内置 `.nvmrc`（内容为 `22`），CI 通过 `actions/setup-node` 的 `node-version-file: .nvmrc` 读取，因此本地、CI、生产构建使用同一 Node 主版本。
 
 ```bash
 # 1. 安装依赖
@@ -289,7 +278,7 @@ npm run dev
 | `npm run preview` | 预览构建产物（`127.0.0.1:4173`） |
 | `npm run serve` | 预览构建产物并监听所有网卡（`0.0.0.0:4173`），便于用手机访问同一局域网地址测试 |
 | `npm run icons` | 重新生成 `public/icons/` 下的 PWA 图标 |
-| `npm run check:data` | 运行 21 项数据、推荐与持久化检查，失败时退出码为 1 |
+| `npm run check:data` | 运行 25 项数据、推荐、存储与备份检查，失败时退出码为 1（含 249 条条目数、11 个类型、23 条短名映射等断言） |
 | `npm run test:e2e` | 构建后运行手机端浏览器回归测试（随机、收藏、历史、忌口、转盘、离线） |
 
 首次运行浏览器测试先执行 `npx playwright install chromium`。本机已安装 Chrome 时可设置环境变量 `PW_CHANNEL=chrome`。
@@ -380,7 +369,7 @@ npm run icons
 >
 > - `vercel.json` 显式锁定 `framework: vite`、`buildCommand: npm run build`、`outputDirectory: dist`、`installCommand: npm ci`；同时为 `/sw.js` 设置了 `must-revalidate`、为 `/assets/*` 设置了长缓存。
 > - `.vercelignore` 已排除 `node_modules`、`dist`、`.workbuddy-ai`、Vite 时间戳临时文件与部署包本身。
-> - `package.json` 提供 `deploy` 脚本（等价于 `npx vercel --prod`），Node 要求为 22.22+（22.x）。
+> - `package.json` 提供 `deploy` 脚本（等价于 `npx vercel --prod`），`engines.node` 要求为 `>=22.22.0 <23`（见 `.nvmrc`）。
 > - 使用 HashRouter，**不需要**配置 `rewrites` / history fallback，刷新子路由不会 404。
 
 **方式 A：命令行（最快）**
@@ -534,7 +523,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc    # 与本仓库 CI 一致；也可写死为 '22'
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -583,10 +572,16 @@ jobs:
 - **Android / 桌面端图标**：来自 `manifest.webmanifest` 的 `icons` 字段，包含 192×192、512×512 以及 `purpose: maskable` 的 512×512 自适应图标
 - **主题色**：`theme-color` 与清单中的 `theme_color`、`background_color` 统一为 `#FFF8F2`（与页面背景一致）。这样启动画面到首屏的过渡没有色差，独立窗口模式下的状态栏也不会出现一条突兀的橙色横条；品牌橙 `#FF6B35` 只用在按钮等强调元素上
 - **显示模式**：`display: "standalone"`、`orientation: "portrait"`、`start_url` 与 `scope` 均为 `/`
-- **离线能力**：`public/sw.js` 在正式构建中自动注册（缓存名 `tqsc-cache-v1`），预缓存 `/`、`/index.html`、`/manifest.webmanifest`、`/favicon.svg`；离线打开时导航请求回退到缓存的 `index.html`，应用仍可正常使用（历史、收藏等数据本来就在本机）
-- **更新机制**：Service Worker 安装后立即 `skipWaiting()` 并 `clients.claim()`，新版本激活时会自动清理旧缓存
+- **离线能力**：`public/sw.js` 在正式构建中自动注册（缓存名 `tqsc-cache-v2`），预缓存 `/`、`/index.html`、`/manifest.webmanifest`、`/favicon.svg` 与 4 个图标；离线打开时导航请求回退到缓存的 `index.html`，应用仍可正常使用（历史、收藏等数据本来就在本机）
+- **更新机制**：Service Worker 安装后立即 `skipWaiting()` 并 `clients.claim()`。检测到新版本时（`registration.waiting`，或 `updatefound` 后新 SW 进入 `installed` 且已有 `controller`），`src/main.jsx` 调用 `src/lib/pwaUpdate.js` 的 `markPwaUpdateReady()` 广播更新状态；`src/components/UpdateBanner.jsx` 订阅该状态并在界面顶部显示「有新版本」提示，用户点击后由 `applyPwaUpdate()` 让 waiting 中的新 SW 立即接管，页面随之自动重载。整个过程**不触碰任何 localStorage 数据**；新版本激活时仅清理本应用的旧缓存（`tqsc-cache-` 前缀）
 
-> 若更新了代码但手机上的图标仍显示旧版本，可关闭该 PWA 后重新打开，或在系统设置中清除 Safari 网站数据后重新添加。
+> 若更新了代码但手机上的图标仍显示旧版本，请**先按顺序尝试**：
+>
+> 1. 完全关闭该 PWA（从后台任务列表中划掉）后重新打开
+> 2. 若应用内出现「有新版本」提示，点击确认更新，等待页面自动重载
+> 3. 仍不生效时，在浏览器中强制刷新一次（iOS 上可先移除主屏图标再重新添加，这一步不会清除站点数据）
+>
+> ⚠️ **不要为了更新而清除网站数据**。清除站点数据会一并删除 `localStorage` 里的**收藏、历史记录与忌口设置**（详见[数据存储说明](#数据存储说明)），属于不可逆操作。仅在数据已损坏、应用无法正常启动时，才把它作为最后手段，**且务必先导出备份**。
 
 ---
 
@@ -602,8 +597,19 @@ jobs:
 | --- | --- | --- | --- |
 | `localStorage` | `tqsc:v1:history` | 历史记录数组 | 每条含 `uid` / `id` / `name` / `emoji` / `category` / `taste` / `ts`，最多 60 条 |
 | `localStorage` | `tqsc:v1:favorites` | 收藏的食物 id 数组 | 已去重 |
+| `localStorage` | `tqsc:v1:exclusions` | 忌口标签数组 | 取值于 `香菜` / `内脏` / `鱼虾贝类` / `辣`，已去重 |
+| `localStorage` | `tqsc:v1:filters` | 筛选条件偏好 | 预算 / 口味 / 类型 / 风味 / 时段 / 场景 / 忌口的记忆值 |
 | `localStorage` | `tqsc:v1:stats` | 统计数据 | `{ totalDecided, firstUsedAt }`，即首页的「已决定顿数」 |
 | `sessionStorage` | `tqsc:v1:dislikes` | 「这个不要」的食物 id 数组 | **仅当前标签页会话有效**，关闭标签页后自动清空 |
+
+### 备份与恢复
+
+「❤️ 收藏」页底部的**本地数据备份**面板（`src/components/BackupPanel.jsx`）支持：
+
+- **导出 JSON**：把历史记录、收藏、忌口与筛选偏好等打包下载成一个备份文件（`sessionStorage` 的 `dislikes` 刻意不包含在内，它只在会话内有效）
+- **导入 JSON**：解析备份文件并与现有数据**合并**（不是覆盖）——重复项去重、新增项计入、**已有数据不会被删除**
+
+**在清除站点数据或更换设备之前，建议先导出一次备份**，这样即使本地数据丢失也能恢复。
 
 ### 清空数据的方法
 
@@ -617,7 +623,7 @@ jobs:
 
 1. 打开应用页面 → 按 <kbd>F12</kbd> 打开开发者工具
 2. 切换到 **Application**（Chrome/Edge）或 **存储**（Firefox）面板
-3. 展开 **Local Storage**，找到当前站点，删除 `tqsc:v1:history`、`tqsc:v1:favorites`、`tqsc:v1:stats`
+3. 展开 **Local Storage**，找到当前站点，删除 `tqsc:v1:history`、`tqsc:v1:favorites`、`tqsc:v1:exclusions`、`tqsc:v1:filters`、`tqsc:v1:stats`
 4. 展开 **Session Storage**，删除 `tqsc:v1:dislikes`
 5. 刷新页面
 
@@ -634,9 +640,13 @@ Object.keys(sessionStorage)
 location.reload()
 ```
 
-**方法三：清除站点数据**
+**方法三：清除站点数据（⚠️ 会连同业务数据一起丢失）**
 
-在浏览器设置中清除该站点的 Cookie 与网站数据（iOS 为「设置 → Safari → 高级 → 网站数据」），效果同上。
+在浏览器设置中清除该站点的 Cookie 与网站数据（iOS 为「设置 → Safari → 高级 → 网站数据」）。
+
+> ⚠️ **警告**：该方法会删除本站点下的**全部** `localStorage`/`sessionStorage` 数据，即**收藏、历史记录、忌口设置、筛选偏好与统计数据都会被一并清除**，且不可撤销。只有在数据已损坏、应用无法正常启动时才建议使用，**执行前请先在应用内导出备份**。
+>
+> 如果你只是想解决「更新后还是旧版本」的问题，请改用[添加到 iPhone 主屏（PWA）](#添加到-iphone-主屏pwa)章节中的正常更新流程，不要清除站点数据。
 
 > 注意：清除浏览器数据、更换浏览器、使用无痕模式、更换设备，都会导致记录丢失或不可见，这是纯前端方案的固有特性。
 
@@ -690,7 +700,7 @@ location.reload()
 
 ### `SHORT_NAMES` 的作用
 
-`SHORT_NAMES` 是**转盘扇区专用的短名称映射表**（`id -> 短标签`），当前定义了 23 条，例如：
+`SHORT_NAMES` 是**转盘扇区专用的短名称映射表**（`id -> 短标签`），当前定义了 23 条（由 `npm run check:data` 的第 06 项校验：键必须存在且短名不超过 4 字），例如：
 
 ```js
 export const SHORT_NAMES = {

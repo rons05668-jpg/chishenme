@@ -5,25 +5,25 @@ import ResultSheet from '../components/ResultSheet'
 import TopBar from '../components/TopBar'
 import Wheel from '../components/Wheel'
 import FoodResultCard from '../components/FoodResultCard'
-import { DEFAULT_FILTERS, summarizeFilters, toPickerFilters } from '../lib/filters'
-import { buildWheelPool } from '../lib/picker'
+import { suggestRelaxations, summarizeFilters, toPickerFilters } from '../lib/filters'
+import { buildWheelPool, filterFoods } from '../lib/picker'
+import useMediaQuery from '../hooks/useMediaQuery'
 import { useAppState } from '../state/AppState'
 
 const MIN_SEGMENTS = 8
 const MAX_SEGMENTS = 10
 
 export default function WheelPage() {
-  const { history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } = useAppState()
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const { filters, updateFilters, resetFilters, history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } =
+    useAppState()
   const [showFilters, setShowFilters] = useState(false)
   const [batch, setBatch] = useState(0)
   const [spinSignal, setSpinSignal] = useState(0)
   const [sheetFood, setSheetFood] = useState(null)
   const [spinning, setSpinning] = useState(false)
 
-  const applyFilters = useCallback((patch) => {
-    setFilters((prev) => ({ ...prev, ...patch }))
-  }, [])
+  // 手机端：筛选面板切换为紧凑模式（次要条件折叠）
+  const isMobile = useMediaQuery('(max-width: 640px)')
 
   const pickerFilters = useMemo(() => toPickerFilters({ ...filters, exclusions }), [filters, exclusions])
   useEffect(() => setSheetFood(null), [pickerFilters])
@@ -39,6 +39,15 @@ export default function WheelPage() {
   const items = useMemo(
     () => buildWheelPool(pickerFilters, contextRef.current, MIN_SEGMENTS, MAX_SEGMENTS),
     [pickerFilters, batch]
+  )
+
+  /**
+   * 转盘候选就是严格筛选后的池子，所以 countFor 直接用 filterFoods 的结果长度。
+   * 同样注入当前忌口，保证建议只涉及普通筛选条件；只计算不应用。
+   */
+  const relaxations = useMemo(
+    () => suggestRelaxations(filters, (next) => filterFoods(toPickerFilters({ ...next, exclusions })).length),
+    [filters, exclusions]
   )
 
   const handleResult = (food) => setSheetFood(food)
@@ -66,6 +75,13 @@ export default function WheelPage() {
     setBatch((value) => value + 1)
     setSheetFood(null)
     showToast('已换一批候选', '🔄')
+  }
+
+  // 用户主动应用某条放宽建议
+  const applyRelaxation = (suggestion) => {
+    updateFilters(suggestion.patch)
+    setSheetFood(null)
+    showToast(`已放宽「${suggestion.label}」`, '🔓')
   }
 
   return (
@@ -107,7 +123,14 @@ export default function WheelPage() {
             transition={{ duration: 0.26, ease: [0.22, 0.9, 0.3, 1] }}
             style={{ overflow: 'hidden' }}
           >
-            <FilterPanel filters={filters} onChange={applyFilters} disabled={spinning} />
+            <FilterPanel
+              filters={filters}
+              onChange={updateFilters}
+              onReset={resetFilters}
+              disabled={spinning}
+              matchCount={items.length}
+              compact={isMobile}
+            />
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -115,7 +138,11 @@ export default function WheelPage() {
       {items.length === 0 ? (
         <div className="empty" role="status">
           <span className="empty__title">没有符合条件的食物</span>
-          <span className="empty__text">请放宽条件或调整忌口。</span>
+          <span className="empty__text">
+            {relaxations.length
+              ? '放宽下面任意一个条件，转盘就能转起来（忌口不会被改动）。'
+              : '当前主要是忌口限制导致没有候选。忌口不会被自动放宽，你可以自行调整。'}
+          </span>
         </div>
       ) : items.length === 1 ? (
         <>
@@ -130,6 +157,23 @@ export default function WheelPage() {
         onSpinChange={setSpinning}
         spinLabel="转一下"
       />}
+
+      {items.length === 0 && relaxations.length ? (
+        <ul className="relax-list">
+          {relaxations.map((suggestion) => (
+            <li key={suggestion.key} className="relax-list__item">
+              <button
+                type="button"
+                className="option"
+                onClick={() => applyRelaxation(suggestion)}
+                aria-label={`放宽${suggestion.label}，去掉${suggestion.from}，可多 ${suggestion.gain} 种食物`}
+              >
+                放宽「{suggestion.label}」（去掉 {suggestion.from}）→ 可多 {suggestion.gain} 种
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <div className="card card--tint">
         <div className="section-title">🎯 转盘说明</div>

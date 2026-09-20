@@ -17,8 +17,12 @@ self.addEventListener('install', (event) => {
         const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1])
         await cache.addAll([...PRECACHE, ...assets])
       })
-      .then(() => self.skipWaiting())
   )
+})
+
+// 新版本不再自动接管，先进入 waiting 状态，由页面提示用户后主动确认更新。
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {

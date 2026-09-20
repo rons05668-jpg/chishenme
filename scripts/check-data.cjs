@@ -453,7 +453,22 @@ async function main() {
       storage.saveExclusions(['香菜', '内脏', '香菜', '未知'])
       assert(storage.loadExclusions().join(',') === '香菜,内脏', '忌口读写错误')
       assert(storage.loadFavorites().join(',') === 'huangmenji,niupai', '旧收藏被改动')
-      assert(storage.loadHistory()[0].id === 'huangmenji', '旧历史被改动')
+      // 旧历史记录缺少 name 等展示字段，必须保留并由食物库补全，而不能被当成脏数据丢弃
+      const legacy = storage.loadHistory()
+      assert(legacy.length === 1, `旧历史记录被丢弃，实际保留 ${legacy.length} 条`)
+      assert(legacy[0].id === 'huangmenji', '旧历史 id 被改动')
+      assert(legacy[0].name === '黄焖鸡米饭', `旧历史 name 未从食物库补全，实际「${legacy[0].name}」`)
+      assert(typeof legacy[0].emoji === 'string' && legacy[0].emoji.length > 0, '旧历史 emoji 未补全')
+      // 缺 id / ts 的脏数据才应被剔除
+      data.set('tqsc:v1:history', JSON.stringify([
+        { id: 'huangmenji', ts: 1 },
+        { ts: 2 },
+        { id: 'niupai' },
+        null,
+        'garbage',
+      ]))
+      assert(storage.loadHistory().length === 1, '脏历史未按 id+ts 规则剔除')
+      data.set('tqsc:v1:history', JSON.stringify([{ id: 'huangmenji', ts: 123, category: '米饭' }]))
       data.set('tqsc:v1:exclusions', '{bad')
       assert(storage.loadExclusions().length === 0, '损坏数据未回退')
       data.set('tqsc:v1:exclusions', '{}')
@@ -464,6 +479,168 @@ async function main() {
       assert(storage.loadExclusions().length === 0, '存储禁用未回退')
     } finally { delete global.window }
     return '旧收藏历史保留，忌口去重持久化，损坏与禁用存储降级'
+  })
+
+  check('22 筛选偏好校验与旧数据兼容', () => {
+    const { normalizeFilterPrefs, DEFAULT_FILTER_PREFS } = storage
+
+    // 空 / 非对象 / 缺字段：全部回退到默认值
+    const empty = normalizeFilterPrefs(null)
+    assert(Object.keys(empty).length === 6, 'normalizeFilterPrefs 结果字段数应为 6')
+    for (const key of Object.keys(DEFAULT_FILTER_PREFS)) {
+      assert(empty[key] === DEFAULT_FILTER_PREFS[key], `缺省时 ${key} 应回退默认值，实际 ${empty[key]}`)
+    }
+
+    // 非法枚举值回退
+    const dirty = normalizeFilterPrefs({
+      budgetKey: '不存在',
+      taste: '超辣',
+      category: '不存在的类型',
+      scene: '天上',
+      cuisine: '火星菜',
+      meal: '宵夜加餐',
+    })
+    for (const key of Object.keys(DEFAULT_FILTER_PREFS)) {
+      assert(dirty[key] === DEFAULT_FILTER_PREFS[key], `非法枚举 ${key} 未回退，实际 ${dirty[key]}`)
+    }
+
+    // 合法值必须保留
+    const valid = normalizeFilterPrefs({
+      budgetKey: 'mid',
+      taste: '辣',
+      category: '火锅锅物',
+      scene: '外卖',
+      cuisine: '川渝',
+      meal: '晚餐',
+    })
+    assert(valid.budgetKey === 'mid' && valid.taste === '辣' && valid.category === '火锅锅物', '合法值未保留')
+    assert(valid.scene === '外卖' && valid.cuisine === '川渝' && valid.meal === '晚餐', '合法值未保留')
+
+    // 字段类型错误（数字 / 数组）也要回退而非崩溃
+    const wrongTypes = normalizeFilterPrefs({ taste: 123, category: ['米饭'], scene: {}, budgetKey: null })
+    assert(wrongTypes.taste === DEFAULT_FILTER_PREFS.taste, '数字类型未回退')
+    assert(wrongTypes.category === DEFAULT_FILTER_PREFS.category, '数组类型未回退')
+    assert(wrongTypes.scene === DEFAULT_FILTER_PREFS.scene, '对象类型未回退')
+
+    return '默认回退、非法枚举回退、合法值保留、类型错误容错'
+  })
+
+  check('23 备份导出结构与格式版本', () => {
+    const { buildBackup, BACKUP_FORMAT_VERSION } = storage
+    const payload = buildBackup({
+      history: [{ uid: 'a', id: 'huangmenji', name: '黄焖鸡米饭', ts: 1 }],
+      favorites: ['huangmenji', 'huangmenji', 'niupai'],
+      exclusions: ['香菜', '香菜', '不存在'],
+      filterPrefs: { taste: '辣' },
+      stats: { totalDecided: 3, firstUsedAt: 1 },
+    })
+    assert(payload.formatVersion === BACKUP_FORMAT_VERSION, '缺少格式版本')
+    assert(payload.app === 'today-eat-what', 'app 标识错误')
+    assert(typeof payload.exportedAt === 'string', '缺少导出时间')
+    assert(payload.data.favorites.length === 2, '收藏未去重')
+    assert(payload.data.exclusions.join(',') === '香菜', '忌口未去重或未过滤非法值')
+    assert(payload.data.filterPrefs.taste === '辣', '偏好未保留')
+    assert(payload.data.history.length === 1, '历史未保留')
+    return `v${payload.formatVersion}，含导出时间；收藏去重 3→2，忌口去重并过滤非法值`
+  })
+
+  check('24 导入非法文件被拒绝且不改动数据', () => {
+    const { parseBackup, MAX_BACKUP_BYTES } = storage
+
+    // 非字符串
+    assert(parseBackup(null).ok === false, 'null 应被拒绝')
+    assert(parseBackup(123).ok === false, '数字应被拒绝')
+    // 空文件
+    assert(parseBackup('   ').ok === false, '空内容应被拒绝')
+    // 非 JSON
+    assert(parseBackup('{不是json').ok === false, '非法 JSON 应被拒绝')
+    // 过大文件
+    const huge = 'x'.repeat(MAX_BACKUP_BYTES + 1)
+    const tooBig = parseBackup(huge)
+    assert(tooBig.ok === false && /过大/.test(tooBig.reason), '超大文件应被拒绝')
+    // 非法 JSON 数组顶层
+    assert(parseBackup('[1,2,3]').ok === false, '数组顶层应被拒绝')
+    // 非本应用备份
+    assert(parseBackup('{"app":"other-app","formatVersion":1,"data":{}}').ok === false, '其他应用备份应被拒绝')
+    // 缺格式版本
+    assert(parseBackup('{"app":"today-eat-what","data":{}}').ok === false, '缺格式版本应被拒绝')
+    // 版本过高
+    const future = parseBackup('{"app":"today-eat-what","formatVersion":999,"data":{}}')
+    assert(future.ok === false && /版本/.test(future.reason), '过高版本应被拒绝')
+    // 缺 data
+    assert(parseBackup('{"app":"today-eat-what","formatVersion":1}').ok === false, '缺 data 应被拒绝')
+
+    // 合法文件但字段类型错误：整体不失败，字段跳过并给出警告
+    const partial = parseBackup(JSON.stringify({
+      app: 'today-eat-what',
+      formatVersion: 1,
+      data: { history: 'kidding', favorites: ['huangmenji'], exclusions: null },
+    }))
+    assert(partial.ok === true, '字段类型错误不应导致整体导入失败')
+    assert(partial.warnings.length > 0, '字段类型错误应产生警告')
+    assert(partial.data.favorites.length === 1, '有效字段仍应被保留')
+
+    return '非字符串/空/非法JSON/超大/非本应用/缺版本/版本过高/缺data 全部拒绝；部分字段错误可降级'
+  })
+
+  check('25 导入合并去重且不删除已有数据', () => {
+    const { mergeImported, parseBackup } = storage
+
+    const current = {
+      history: [
+        { uid: 'h1', id: 'huangmenji', name: '黄焖鸡米饭', ts: 200 },
+        { uid: 'h2', id: 'niupai', name: '牛排', ts: 100 },
+      ],
+      favorites: ['huangmenji', 'niupai'],
+      exclusions: ['香菜'],
+    }
+    const incoming = {
+      history: [
+        { uid: 'h1', id: 'huangmenji', name: '黄焖鸡米饭', ts: 200 }, // 重复，应被去重
+        { uid: 'h3', id: 'malatang', name: '麻辣烫', ts: 300 },       // 新增
+      ],
+      favorites: ['huangmenji', 'malatang'], // 含重复项 + 新增项
+      exclusions: ['香菜', '内脏'],          // 含重复项 + 新增项
+      filterPrefs: { taste: '辣' },
+    }
+
+    const merged = mergeImported(current, incoming)
+    // 历史：h1 去重，h3 新增 → 共 3 条，按时间倒序
+    assert(merged.history.length === 3, `历史应合并为 3 条，实际 ${merged.history.length}`)
+    assert(merged.history[0].ts === 300, '历史未按时间倒序')
+    assert(merged.added.history === 1, `历史新增应为 1，实际 ${merged.added.history}`)
+    // 收藏：并集去重 → huangmenji, niupai, malatang
+    assert(merged.favorites.length === 3, `收藏应合并为 3 个，实际 ${merged.favorites.length}`)
+    assert(merged.added.favorites === 1, '收藏新增应为 1')
+    // 忌口：并集去重 → 香菜, 内脏
+    assert(merged.exclusions.join(',') === '香菜,内脏', '忌口合并错误')
+    assert(merged.added.exclusions === 1, '忌口新增应为 1')
+    // 现有数据全部保留
+    assert(merged.history.some((r) => r.uid === 'h2'), '现有历史 h2 被删除')
+    assert(merged.favorites.includes('niupai'), '现有收藏 niupai 被删除')
+    assert(merged.exclusions.includes('香菜'), '现有忌口 香菜 被删除')
+
+    // 导入空数据不应减少任何现有数据
+    const emptyImport = mergeImported(current, { history: [], favorites: [], exclusions: [] })
+    assert(emptyImport.history.length === 2, '空导入不应改变历史')
+    assert(emptyImport.favorites.length === 2, '空导入不应改变收藏')
+    assert(emptyImport.exclusions.length === 1, '空导入不应改变忌口')
+
+    // 与 parseBackup 串联：完整链路
+    const text = JSON.stringify({
+      app: 'today-eat-what',
+      formatVersion: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      data: { history: [{ uid: 'h9', id: 'baozi', name: '包子', ts: 400 }], favorites: ['baozi'], exclusions: ['辣'] },
+    })
+    const parsed = parseBackup(text)
+    assert(parsed.ok === true, '合法备份应解析成功')
+    const chained = mergeImported(current, parsed.data)
+    assert(chained.history.length === 3, '串联后历史应为 3 条')
+    assert(chained.favorites.length === 3, '串联后收藏应为 3 个')
+    assert(chained.exclusions.length === 2, '串联后忌口应为 2 项')
+
+    return '重复去重、新增计入、现有数据零删除、空导入无副作用、parse+merge 串联正确'
   })
 
   /* --------------------------- 输出报告 --------------------------- */

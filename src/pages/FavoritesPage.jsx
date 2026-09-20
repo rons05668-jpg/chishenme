@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import BackupPanel from '../components/BackupPanel'
 import FoodResultCard from '../components/FoodResultCard'
 import TopBar from '../components/TopBar'
 import { getFoodById, priceLabel } from '../data/foods'
@@ -139,6 +140,9 @@ export default function FavoritesPage() {
           </div>
         </>
       )}
+
+      {/* 备份面板放在页面最底部：空态与有收藏时都能看到 */}
+      <BackupPanel />
     </div>
   )
 }

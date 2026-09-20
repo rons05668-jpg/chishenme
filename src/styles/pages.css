@@ -746,6 +746,129 @@
   transform: scale(0.88);
 }
 
+/* ============================== 数据备份面板 ============================== */
+
+.backup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.backup__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backup__emoji {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  font-size: 19px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs), inset 0 0 0 1px var(--line);
+}
+
+.backup__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 6px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.backup__stat-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.backup__stat-value {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--primary-ink);
+}
+
+.backup__stat-label {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.backup__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* 隐藏的原生文件输入：由上方按钮触发，避免破坏整体视觉 */
+.backup__file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.backup__result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.5;
+  animation: rise-in 0.3s var(--ease-out) both;
+}
+
+.backup__result.is-success {
+  color: #146b4d;
+  background: #e9f9f1;
+  box-shadow: inset 0 0 0 1px rgba(31, 174, 131, 0.28);
+}
+
+.backup__result.is-error {
+  color: #a52121;
+  background: #fdecec;
+  box-shadow: inset 0 0 0 1px rgba(214, 64, 64, 0.26);
+}
+
+.backup__result-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.backup__result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 2px;
+  font-size: 12.5px;
+}
+
+.backup__result-list > li::before {
+  content: '·';
+  margin-right: 5px;
+  opacity: 0.6;
+}
+
 /* ============================== 响应式 ============================== */
 
 @media (min-width: 720px) {
@@ -776,5 +899,179 @@
 
   .fav-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ===================== 筛选面板：摘要 / 数量 / 折叠 ===================== */
+
+.filter-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.filter-panel__main,
+.filter-panel__extra-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-summary {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-summary__title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.filter-summary__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.filter-summary__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--primary-ink);
+  background: var(--primary-soft);
+  white-space: nowrap;
+}
+
+.filter-summary__chip-label {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.filter-summary__empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.filter-reset {
+  flex-shrink: 0;
+}
+
+.filter-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 零候选时的放宽建议提示行 */
+.pool-hint--relax {
+  align-items: flex-start;
+  color: var(--primary-ink);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 53, 0.24);
+  line-height: 1.6;
+}
+
+/* 可点击的放宽建议列表：点击后才由用户主动应用，绝不自动生效 */
+.relax-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.relax-list__item {
+  margin: 0;
+}
+
+.relax-list .option {
+  text-align: left;
+  line-height: 1.4;
+}
+
+.relax-list .option:active {
+  transform: scale(0.98);
+}
+
+/* 面板内的匹配数量行：复用 .pool-hint 视觉，去掉外层额外间距 */
+.pool-hint--inline {
+  padding: 8px 12px;
+}
+
+.pool-hint--inline.is-empty {
+  color: var(--primary-ink);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 53, 0.24);
+}
+
+.pool-hint--inline.is-empty strong {
+  color: var(--primary-ink);
+}
+
+/* 紧凑模式下的「展开更多条件」按钮 */
+.filter-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: background-color 0.2s var(--ease-out);
+}
+
+.filter-more__text {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.filter-more__action {
+  flex-shrink: 0;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* 折叠动画：仅在展开态做一次轻微的进入动画（收起是瞬时的），避免高度抖动 */
+.filter-panel__extra-inner {
+  animation: filter-unfold 0.24s var(--ease-out) both;
+}
+
+@keyframes filter-unfold {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-panel__extra-inner {
+    animation: none;
+  }
+
+  .filter-more {
+    transition: none;
   }
 }

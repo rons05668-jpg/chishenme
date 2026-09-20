@@ -1,17 +1,21 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import FilterPanel from '../components/FilterPanel'
 import FoodResultCard from '../components/FoodResultCard'
 import TopBar from '../components/TopBar'
-import { DEFAULT_FILTERS, toPickerFilters } from '../lib/filters'
-import { EMPTY_POOL_HINT, EMPTY_RESULT_HINT } from '../lib/content'
+import { suggestRelaxations, toPickerFilters } from '../lib/filters'
+import { EMPTY_RESULT_HINT } from '../lib/content'
 import { filterFoods } from '../lib/picker'
 import useDecider from '../hooks/useDecider'
+import useMediaQuery from '../hooks/useMediaQuery'
 import { useAppState } from '../state/AppState'
 
 export default function RandomPage() {
-  const { history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } = useAppState()
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const { filters, updateFilters, resetFilters, history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } =
+    useAppState()
+
+  // 手机端：筛选面板切换为紧凑模式（次要条件折叠）
+  const isMobile = useMediaQuery('(max-width: 640px)')
 
   const pickerFilters = useMemo(() => toPickerFilters({ ...filters, exclusions }), [filters, exclusions])
   const pool = useMemo(() => filterFoods(pickerFilters), [pickerFilters])
@@ -23,10 +27,16 @@ export default function RandomPage() {
 
   const { rolling, result, rollEmoji, decide, setResult } = useDecider(pool, context)
 
-  // 函数式更新：连续点选多个条件时不会相互覆盖
-  const applyFilters = useCallback((patch) => {
-    setFilters((prev) => ({ ...prev, ...patch }))
-  }, [])
+  /**
+   * 零候选时的具体放宽建议。
+   * countFor 每次都带上当前忌口：算出来的是「在现有忌口不变的前提下」放宽某一个
+   * 普通条件能多出多少候选，因此建议里永远不会包含放宽忌口。
+   * 这里只计算、不应用——是否放宽完全由用户点击决定。
+   */
+  const relaxations = useMemo(
+    () => suggestRelaxations(filters, (next) => filterFoods(toPickerFilters({ ...next, exclusions })).length),
+    [filters, exclusions]
+  )
 
   const handleDecide = () => {
     if (!pool.length) {
@@ -51,19 +61,63 @@ export default function RandomPage() {
     showToast(`已记录：${food.name}`, '✅')
   }
 
+  // 用户主动应用某条放宽建议
+  const applyRelaxation = (suggestion) => {
+    updateFilters(suggestion.patch)
+    showToast(`已放宽「${suggestion.label}」`, '🔓')
+  }
+
   return (
     <div className="page">
       <TopBar title="随机吃什么" subtitle="先定条件，再交给运气" />
 
-      <FilterPanel filters={filters} onChange={applyFilters} />
+      <FilterPanel
+        filters={filters}
+        onChange={updateFilters}
+        onReset={resetFilters}
+        matchCount={pool.length}
+        compact={isMobile}
+      />
 
       <div className="pool-hint">
         <span aria-hidden="true">🔍</span>
         <span>
           当前条件匹配到 <strong>{pool.length}</strong> 种食物
-          {pool.length === 0 ? '，试着放宽一个条件' : ''}
+          {pool.length === 0 ? '，下面是可以立刻放宽的条件' : ''}
         </span>
       </div>
+
+      {pool.length === 0 ? (
+        <div className="pool-hint pool-hint--relax" role="status">
+          <span aria-hidden="true">💡</span>
+          <span>
+            {relaxations.length ? (
+              <span>想更快吃到？点一下就能放宽某一个条件（忌口不会被改动）：</span>
+            ) : (
+              <span>
+                当前主要是忌口限制导致没有候选。忌口不会被自动放宽，你可以自行调整。
+              </span>
+            )}
+          </span>
+        </div>
+      ) : null}
+
+      {pool.length === 0 && relaxations.length ? (
+        <ul className="relax-list">
+          {relaxations.map((suggestion) => (
+            <li key={suggestion.key} className="relax-list__item">
+              <button
+                type="button"
+                className="option"
+                onClick={() => applyRelaxation(suggestion)}
+                aria-label={`放宽${suggestion.label}，去掉${suggestion.from}，可多 ${suggestion.gain} 种食物`}
+              >
+                放宽「{suggestion.label}」（去掉 {suggestion.from}）→ 可多 {suggestion.gain} 种
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <div className="dice-wrap">
         <button
@@ -116,7 +170,7 @@ export default function RandomPage() {
             </span>
             <span className="empty__title">还没有决定吃什么</span>
             <span className="empty__text">
-              {pool.length ? EMPTY_RESULT_HINT : EMPTY_POOL_HINT}
+              {pool.length ? EMPTY_RESULT_HINT : '放宽下面任意一个条件，候选就会回来。'}
             </span>
           </motion.div>
         )}

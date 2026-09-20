@@ -19,9 +19,13 @@ const AVAILABILITY_NOTES = {
  * 换成饮品维度（品牌 / 冷热 / 甜度 / 咖啡因 / 类型 / 场景）。
  *
  * 诚实性约定：
- *  - 价格一律标注为参考价，并固定展示「菜单与价格以门店为准」
+ *  - 价格一律标注为参考价（第三方来源由 drinkPriceLabel 标「第三方参考」）
  *  - 不使用「实时价格」「实时库存」等表述
  *  - 区域 / 季节限定、在售状态待确认会显式提示
+ *
+ * 注：底部「菜单与价格以门店为准（参考价来源：…）」整段提示已于 2026-09-20
+ * 按用户要求移除。价格来源仍保留在数据层（drink.priceNote / priceSource），
+ * 需要时可重新渲染，不要在数据里删。
  */
 export default function DrinkResultCard({
   drink,
@@ -124,9 +128,6 @@ export default function DrinkResultCard({
 
       <p className="result-card__desc">{drink.desc}</p>
       <p className="result-card__quote">「{quote}」</p>
-      <p className="tiny drink-disclaimer">
-        菜单与价格以门店为准{drink.priceNote ? `（参考价来源：${drink.priceNote}）` : ''}
-      </p>
 
       <div className="stack" style={{ marginTop: 18 }}>
         <div className="result-actions result-actions--main">

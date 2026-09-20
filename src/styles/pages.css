@@ -380,13 +380,6 @@
   color: var(--primary-ink);
 }
 
-/* 价格与在售状态的免责说明：弱化处理，不抢主信息注意力 */
-.drink-disclaimer {
-  position: relative;
-  margin-top: 10px;
-  color: var(--text-3);
-}
-
 /* 抽样规则说明：常态展示，弱化但可读 */
 .drink-sampling-note {
   margin-top: 10px;

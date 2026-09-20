@@ -428,8 +428,17 @@ test('饮料页：随机推荐展示品牌与饮品名，并标注价格来源',
 
   // 品牌名必须展示（需求：必须推荐具体的品牌＋饮品）
   await expect(page.locator('.result-card__brand')).toBeVisible()
-  // 固定展示门店免责说明，且不得出现「实时价格」这类未经接入的表述
-  await expect(page.getByText('菜单与价格以门店为准', { exact: false })).toBeVisible()
+  // 价格来源由 drinkPriceLabel 承载：第三方来源必须标「第三方参考」
+  await expect(page.locator('.result-card__price')).toBeVisible()
+  const priceText = await page.locator('.result-card__price').innerText()
+  expect(priceText.trim().length).toBeGreaterThan(0)
+  if (priceText.includes('（第三方参考）')) {
+    // 第三方来源必须显式标注，不能伪装成官方价
+    expect(priceText).toContain('第三方参考')
+  }
+  // 底部「菜单与价格以门店为准（参考价来源：…）」整段说明已按要求移除
+  await expect(page.getByText('菜单与价格以门店为准', { exact: false })).toHaveCount(0)
+  // 不得出现「实时价格」这类未经接入的表述
   await expect(page.getByText('实时价格', { exact: false })).toHaveCount(0)
   expect(errors).toEqual([])
 })

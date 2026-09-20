@@ -12,19 +12,21 @@
     "serve": "vite preview --host 0.0.0.0 --port 4173",
     "icons": "node scripts/generate-icons.cjs",
     "check:data": "node scripts/check-data.cjs",
+    "test:e2e": "playwright test",
     "deploy": "npx vercel --prod"
   },
   "dependencies": {
     "framer-motion": "^11.11.17",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^5.4.11"
+    "@playwright/test": "^1.63.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.0"
   },
   "engines": {
-    "node": "22.x"
+    "node": ">=22.22.0 <23"
   }
 }

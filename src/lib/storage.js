@@ -4,6 +4,8 @@
  * 隐私模式或存储被禁用时不会导致应用崩溃。
  */
 
+import { EXCLUSIONS } from '../data/foods'
+
 const PREFIX = 'tqsc:v1:'
 const KEYS = {
   history: `${PREFIX}history`,
@@ -111,4 +113,13 @@ export function loadStats() {
 
 export function saveStats(stats) {
   writeLocal(KEYS.stats, stats)
+}
+
+export function loadExclusions() {
+  const list = readLocal(PREFIX + 'exclusions', [])
+  return Array.isArray(list) ? [...new Set(list.filter((tag) => EXCLUSIONS.includes(tag)))] : []
+}
+
+export function saveExclusions(list) {
+  writeLocal(PREFIX + 'exclusions', [...new Set(list.filter((tag) => EXCLUSIONS.includes(tag)))])
 }

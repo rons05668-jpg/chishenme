@@ -4,6 +4,7 @@ import FilterPanel from '../components/FilterPanel'
 import ResultSheet from '../components/ResultSheet'
 import TopBar from '../components/TopBar'
 import Wheel from '../components/Wheel'
+import FoodResultCard from '../components/FoodResultCard'
 import { DEFAULT_FILTERS, summarizeFilters, toPickerFilters } from '../lib/filters'
 import { buildWheelPool } from '../lib/picker'
 import { useAppState } from '../state/AppState'
@@ -12,7 +13,7 @@ const MIN_SEGMENTS = 8
 const MAX_SEGMENTS = 10
 
 export default function WheelPage() {
-  const { history, favorites, dislikes, recordEaten, dislikeFood, showToast } = useAppState()
+  const { history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } = useAppState()
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
   const [batch, setBatch] = useState(0)
@@ -24,7 +25,8 @@ export default function WheelPage() {
     setFilters((prev) => ({ ...prev, ...patch }))
   }, [])
 
-  const pickerFilters = useMemo(() => toPickerFilters(filters), [filters])
+  const pickerFilters = useMemo(() => toPickerFilters({ ...filters, exclusions }), [filters, exclusions])
+  useEffect(() => setSheetFood(null), [pickerFilters])
   const context = useMemo(() => ({ history, dislikes, favorites }), [history, dislikes, favorites])
 
   // 用 ref 读取最新的加权上下文：候选只在「条件变化」或「换一批」时重算，
@@ -90,7 +92,7 @@ export default function WheelPage() {
       >
         <span className="filter-toggle__text">
           <span aria-hidden="true">🎛️</span>
-          {summarizeFilters(filters)}
+          {summarizeFilters({ ...filters, exclusions })}
         </span>
         <span className="filter-toggle__action">{showFilters ? '收起' : '修改'}</span>
       </button>
@@ -105,24 +107,34 @@ export default function WheelPage() {
             transition={{ duration: 0.26, ease: [0.22, 0.9, 0.3, 1] }}
             style={{ overflow: 'hidden' }}
           >
-            <FilterPanel filters={filters} onChange={applyFilters} />
+            <FilterPanel filters={filters} onChange={applyFilters} disabled={spinning} />
           </motion.div>
         ) : null}
       </AnimatePresence>
 
-      <Wheel
+      {items.length === 0 ? (
+        <div className="empty" role="status">
+          <span className="empty__title">没有符合条件的食物</span>
+          <span className="empty__text">请放宽条件或调整忌口。</span>
+        </div>
+      ) : items.length === 1 ? (
+        <>
+          <p className="pool-hint">只有一个候选，就选它吧。</p>
+          <FoodResultCard food={items[0]} onEat={handleEat} onReroll={handleNewBatch} onDislike={handleDislike} />
+        </>
+      ) : <Wheel
         items={items}
         context={context}
         onResult={handleResult}
         spinSignal={spinSignal}
         onSpinChange={setSpinning}
         spinLabel="转一下"
-      />
+      />}
 
       <div className="card card--tint">
         <div className="section-title">🎯 转盘说明</div>
         <p className="tiny" style={{ marginTop: 6, lineHeight: 1.7 }}>
-          转盘候选会优先选择符合条件、并且最近没吃过的食物；
+          转盘候选严格符合筛选和忌口条件，并优先选择最近没吃过的食物；
           停下来的那一格就是今天的答案，点击中间的按钮开始。
         </p>
       </div>

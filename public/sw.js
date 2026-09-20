@@ -1,15 +1,22 @@
 /* 今天吃什么？ —— 简易离线缓存 Service Worker
    策略：静态资源优先走缓存，后台顺带更新；导航请求离线时回退到首页。 */
 
-const CACHE = 'tqsc-cache-v1'
-const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg']
+const CACHE = 'tqsc-cache-v2'
+const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg',
+  '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/apple-touch-icon.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE))
-      .catch(() => undefined)
+      .then(async (cache) => {
+        // 首次访问的 JS/CSS 在注册 SW 之前已加载，必须主动预缓存才能首次安装后离线使用。
+        const response = await fetch('/index.html', { cache: 'reload' })
+        if (!response.ok) throw new Error('离线页面预缓存失败')
+        const html = await response.text()
+        const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1])
+        await cache.addAll([...PRECACHE, ...assets])
+      })
       .then(() => self.skipWaiting())
   )
 })
@@ -18,7 +25,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('tqsc-cache-') && key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   )
 })
@@ -46,7 +53,9 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
+    // 带内容哈希的同源静态资源不因 Origin 变化而改变内容；
+    // 预缓存请求与页面模块请求的 Vary: Origin 不同，离线时也应复用。
+    caches.match(request, { ignoreVary: url.pathname.startsWith('/assets/') }).then((cached) => {
       const network = fetch(request)
         .then((response) => {
           if (response && response.ok && response.type === 'basic') {

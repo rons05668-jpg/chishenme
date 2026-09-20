@@ -10,10 +10,10 @@ import useDecider from '../hooks/useDecider'
 import { useAppState } from '../state/AppState'
 
 export default function RandomPage() {
-  const { history, favorites, dislikes, recordEaten, dislikeFood, showToast } = useAppState()
+  const { history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } = useAppState()
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
 
-  const pickerFilters = useMemo(() => toPickerFilters(filters), [filters])
+  const pickerFilters = useMemo(() => toPickerFilters({ ...filters, exclusions }), [filters, exclusions])
   const pool = useMemo(() => filterFoods(pickerFilters), [pickerFilters])
 
   const context = useMemo(
@@ -94,7 +94,7 @@ export default function RandomPage() {
             </span>
             <span className="muted">正在为你翻牌…</span>
           </motion.div>
-        ) : result ? (
+        ) : result && pool.some((food) => food.id === result.id) ? (
           <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <FoodResultCard
               food={result}

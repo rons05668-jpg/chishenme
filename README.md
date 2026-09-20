@@ -94,7 +94,7 @@ assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
 | 玩法 | 入口 | 说明 |
 | --- | --- | --- |
 | 🎲 随机吃什么 | `#/random` | 先选好预算 / 口味 / 类型 / 场景，点「帮我决定」，按加权随机抽一个结果 |
-| 🎡 吃什么转盘 | `#/wheel` | 生成 8–10 个候选扇区，点中间按钮旋转，停在哪格就吃哪个 |
+| 🎡 吃什么转盘 | `#/wheel` | 最多 10 个严格匹配的候选；单候选直接展示，零候选提示调整条件 |
 
 首页（`#/`）会显示当前时段问候语、随机副标题、累计决定顿数，以及上一次决定吃了什么。
 
@@ -106,7 +106,10 @@ assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
 
 - **预算**：不限 / 20 元以内 / 20–40 元 / 40 元以上
 - **口味**：清淡 / 微辣 / 辣 / 重口 / 随机
-- **类型**：米饭 / 面食 / 粉面 / 火锅 / 小吃 / 快餐 / 西餐 / 随机
+- **类型**：米饭 / 粉面 / 包饺饼类 / 火锅锅物 / 家常菜 / 烧烤 / 小吃点心 / 西式主菜 / 快餐简餐 / 粥汤 / 甜品烘焙
+- **风味**：12 个独立地域风味标签，可与类型交叉筛选
+- **时段**：早餐 / 午餐 / 晚餐 / 下午茶 / 夜宵；不会把所有小吃都视为早餐
+- **忌口**：香菜 / 内脏 / 鱼虾贝类 / 辣，可多选，自动保存；随机、转盘和收藏推荐共用。配料不明确时保守排除，不作过敏安全保证
 - **场景**：食堂 / 外卖 / 出去吃 / 随机
 
 预算档位使用「价格区间求交集」判断（`matchBudget`），只要食物价格区间与档位区间有重叠就算命中，避免一刀切。页面会实时提示当前条件匹配到多少种食物。
@@ -129,7 +132,7 @@ assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
 
 ### 转盘
 
-- 候选扇区数量为 8–10 个，由 `buildWheelPool` 生成；筛选结果不足 8 个时，会按「同口味 / 同类型 / 同场景」相似度自动补齐
+- 候选由 `buildWheelPool` 严格筛选，页面最多展示 10 个；不再补入条件外的食物。零候选提示调整条件，单候选直接展示结果卡片
 - 扇区顺序经过 Fisher–Yates 洗牌，避免高权重食物总在同一位置
 - 落点同样按权重决定，再叠加少量随机抖动，看起来自然
 - 旋转 5 圈、约 4.8 秒，带过渡结束兜底（系统开启「减弱动效」时也能正常出结果）
@@ -161,6 +164,7 @@ assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
 - `public/manifest.webmanifest` 提供完整 Web App Manifest（`display: standalone`、竖屏、主题色 `#FF6B35`）
 - `public/sw.js` 为 Service Worker：静态资源「缓存优先 + 后台更新」，导航请求离线时回退到 `/index.html`
 - Service Worker **仅在正式构建产物中注册**（`import.meta.env.PROD`），开发环境不会缓存模块，避免调试时出现「改了代码没生效」
+- 安装时预缓存当前构建的 JS/CSS 与图标，首次安装完成后即可离线重开；更新时仅清理本应用的旧缓存
 
 ---
 
@@ -170,10 +174,10 @@ assets/index-*.js  assets/index-*.css  icons/*.png（4 个）
 | --- | --- | --- |
 | 框架 | React | `^18.3.1` |
 | 渲染 | React DOM | `^18.3.1` |
-| 路由 | react-router-dom（`HashRouter`） | `^6.28.0` |
+| 路由 | react-router-dom（`HashRouter`） | `^7.18.4` |
 | 动效 | framer-motion | `^11.11.17` |
-| 构建 | Vite | `^5.4.11` |
-| Vite React 插件 | @vitejs/plugin-react | `^4.3.4` |
+| 构建 | Vite | `^8.3.0` |
+| Vite React 插件 | @vitejs/plugin-react | `^6.1.1` |
 | 语言 | JavaScript（JSX，ESM，无 TypeScript） | — |
 | 样式 | 手写 CSS（3 个样式文件，无 UI 框架） | — |
 | 状态管理 | React Context + Hooks（`src/state/AppState.jsx`） | — |
@@ -218,7 +222,7 @@ today-eat-what/
 │       ├── icon-512.png
 │       └── icon-maskable-512.png  # Android 自适应图标（留安全区）
 ├── scripts/
-│   ├── check-data.cjs             # 食物数据与推荐算法自检（16 项断言）
+│   ├── check-data.cjs             # 食物数据与推荐算法自检（21 项检查）
 │   ├── generate-icons.cjs         # 纯 Node 生成上述 PNG 图标（无第三方依赖）
 │   └── serve.cjs                  # 生产启动入口：按需构建 + 以 0.0.0.0:$PORT 提供服务
 └── src/
@@ -234,7 +238,8 @@ today-eat-what/
     │   ├── TopBar.jsx             # 子页面顶部栏（返回 + 标题）
     │   └── Wheel.jsx              # SVG 幸运转盘
     ├── data/
-    │   └── foods.js               # 食物数据库 + 预算档位 + 短名称表 + 工具函数
+    │   ├── foods.js               # 原数据与统一导出 + 枚举 + 工具函数
+    │   └── food-metadata.js       # 新增食物与独立分类、时段、忌口标注
     ├── hooks/
     │   └── useDecider.js          # 「帮我决定」的翻牌动画 + 加权抽取流程
     ├── lib/
@@ -260,11 +265,11 @@ today-eat-what/
 
 ## 本地运行
 
-**环境要求**：Node.js 18 及以上（推荐 20+），npm 9+。
+**环境要求**：Node.js 22.22+（22.x），使用 `.nvmrc` 选择 Node 22。生产构建和 CI 使用同一版本系列。
 
 ```bash
 # 1. 安装依赖
-npm install
+npm ci
 
 # 2. 启动开发服务器
 npm run dev
@@ -284,7 +289,12 @@ npm run dev
 | `npm run preview` | 预览构建产物（`127.0.0.1:4173`） |
 | `npm run serve` | 预览构建产物并监听所有网卡（`0.0.0.0:4173`），便于用手机访问同一局域网地址测试 |
 | `npm run icons` | 重新生成 `public/icons/` 下的 PWA 图标 |
-| `npm run check:data` | 运行食物数据与推荐算法自检（16 项断言，失败时退出码为 1） |
+| `npm run check:data` | 运行 21 项数据、推荐与持久化检查，失败时退出码为 1 |
+| `npm run test:e2e` | 构建后运行手机端浏览器回归测试（随机、收藏、历史、忌口、转盘、离线） |
+
+首次运行浏览器测试先执行 `npx playwright install chromium`。本机已安装 Chrome 时可设置环境变量 `PW_CHANNEL=chrome`。
+GitHub Actions 对 main 推送和 PR 执行 `npm ci`、数据检查、依赖审计、生产构建及浏览器测试。Dependabot 定期检查 npm 和 Actions 更新。
+Vercel 保留现有项目及 main 生产分支，安装命令使用 `npm ci`；响应头补充 MIME 嗅探、来源信息及嵌入保护。
 
 > 提示：开发模式下不会注册 Service Worker（只有正式构建才注册），所以本地 `npm run dev` 看不到离线缓存效果，需要构建后用 `npm run preview` 验证。
 
@@ -368,9 +378,9 @@ npm run icons
 
 > **本项目已为 Vercel 预先配置好**，无需在网页端手动调整构建参数：
 >
-> - `vercel.json` 显式锁定 `framework: vite`、`buildCommand: npm run build`、`outputDirectory: dist`、`installCommand: npm install`，避免自动识别被 `package.json` 里的 `start` 脚本干扰；同时为 `/sw.js` 设置了 `must-revalidate`（保证 PWA 能及时更新）、为 `/assets/*` 设置了长缓存。
+> - `vercel.json` 显式锁定 `framework: vite`、`buildCommand: npm run build`、`outputDirectory: dist`、`installCommand: npm ci`；同时为 `/sw.js` 设置了 `must-revalidate`、为 `/assets/*` 设置了长缓存。
 > - `.vercelignore` 已排除 `node_modules`、`dist`、`.workbuddy-ai`、Vite 时间戳临时文件与部署包本身。
-> - `package.json` 增加了 `deploy` 脚本（等价于 `npx vercel --prod`）与 `engines.node >= 18`。
+> - `package.json` 提供 `deploy` 脚本（等价于 `npx vercel --prod`），Node 要求为 22.22+（22.x）。
 > - 使用 HashRouter，**不需要**配置 `rewrites` / history fallback，刷新子路由不会 404。
 
 **方式 A：命令行（最快）**
@@ -634,20 +644,12 @@ location.reload()
 
 ## 扩充食物数据库
 
-食物数据库位于 `src/data/foods.js` 的 `FOODS` 数组中，目前共 **101** 条记录，分布如下：
-
-| 类型 | 数量 | 类型 | 数量 |
-| --- | --- | --- | --- |
-| 米饭 | 24 | 小吃 | 19 |
-| 面食 | 17 | 快餐 | 7 |
-| 粉面 | 12 | 西餐 | 9 |
-| 火锅 | 13 | | |
-
-口味分布：清淡 43 / 微辣 26 / 辣 27 / 重口 5。
+食物数据库由 `src/data/foods.js` 的 `FOODS` 统一导出，目前共 **249** 条、**11** 个类型、**12** 个风味标签。原有 101 个 ID 全部保留，新增 148 条。
+新增数据位于 `src/data/food-metadata.js`，类型、风味、时段独立；同义类型不再重复设置。价格为粗略参考，非门店实时报价。
 
 ### 添加一条记录
 
-在 `FOODS` 数组末尾（或任意位置）按下面的字段结构追加一个对象即可：
+在 `EXTRA_FOODS` 数组末尾按下面的字段结构追加对象，并检查 `enrichFood` 生成的时段与忌口；更新条目数断言后运行全部检查：
 
 ```js
 {
@@ -655,7 +657,8 @@ location.reload()
   name: '牛肉丸子',                    // 展示名称
   emoji: '🍡',                        // 结果卡片与转盘上展示的表情
   price: [15, 28],                    // [最低价, 最高价]，单位：元
-  category: '小吃',                    // 必须是 CATEGORIES 中的值
+  category: '小吃点心',                // 必须是 CATEGORIES 中的值
+  cuisines: ['家常'],                 // 必须是 CUISINES 中的值
   taste: '清淡',                       // 必须是 TASTES 中的值
   scenes: ['食堂', '外卖', '出去吃'],   // 必须是 SCENES 中的子集，可多选
   desc: '手打丸子配清汤，一口一个很满足。', // 一句话描述，显示在结果卡片上
@@ -670,7 +673,9 @@ location.reload()
 | `name` | `string` | 建议 2–6 个字 |
 | `emoji` | `string` | 单个 emoji |
 | `price` | `[number, number]` | 最低价 ≤ 最高价，用于预算筛选 |
-| `category` | `string` | 取值于 `CATEGORIES`：米饭 / 面食 / 粉面 / 火锅 / 小吃 / 快餐 / 西餐 |
+| `category` | `string` | 取值于 `CATEGORIES` 的 11 个食物类型 |
+| `cuisines` / `meals` | `string[]` | 独立风味、时段标签，后者由 enrichFood 生成 |
+| `exclusions` / `uncertainExclusions` | `string[]` | 常见及需确认的配料，两者都会被忌口排除 |
 | `taste` | `string` | 取值于 `TASTES`：清淡 / 微辣 / 辣 / 重口 |
 | `scenes` | `string[]` | 取值于 `SCENES`：食堂 / 外卖 / 出去吃 |
 | `desc` | `string` | 一句话，建议 15–25 字 |
@@ -681,7 +686,7 @@ location.reload()
 
 - 筛选面板自动识别新数据（选项来自 `CATEGORIES` / `TASTES` / `SCENES`，而非食物列表）
 - 加权随机、转盘候选、收藏页都会自动包含它
-- 如果新增了分类 / 口味 / 场景，需要同时更新 `CATEGORIES` / `TASTES` / `SCENES` 常量，以及 `src/lib/content.js` 中的 `CATEGORY_OPTIONS` / `TASTE_OPTIONS` / `SCENE_OPTIONS`（筛选按钮文案列表）
+- 如果新增枚举，仅更新数据层常量；筛选选项自动派生，无需维护第二份列表
 
 ### `SHORT_NAMES` 的作用
 
@@ -700,7 +705,7 @@ export const SHORT_NAMES = {
 它的作用与规则：
 
 - **只影响展示，不影响数据**：转盘扇区宽度有限，长名称会溢出或挤成一团，所以用更口语化的短标签替代
-- **回退逻辑**：`shortName(food)` 会优先取 `SHORT_NAMES[food.id]`，取不到就返回完整的 `food.name`。因此**不配置也能正常运行**，只是长名称在转盘上会显得拥挤
+- **回退逻辑**：依次使用 `SHORT_NAMES[food.id]`、条目的 `shortName`、名称前四个字符，避免转盘文字溢出
 - **使用位置**：仅 `src/components/Wheel.jsx` 渲染扇区文字时调用；结果卡片、历史记录、收藏列表等位置一律显示完整名称
 - **建议**：新增名称较长的食物（超过 4 个字）时，顺手在 `SHORT_NAMES` 中补一条 3–4 字的短标签，例如 `niurou-wanzi: '牛肉丸'`
 
@@ -711,7 +716,6 @@ export const SHORT_NAMES = {
 | 名称 | 作用 |
 | --- | --- |
 | `FOOD_MAP` / `getFoodById(id)` | id → 食物对象的快速索引，收藏与历史记录靠它还原数据 |
-| `avgPrice(food)` | 价格区间平均值，用于预算筛选与均价计算 |
 | `priceLabel(food)` | 价格展示文案，例如 `¥15–28` |
 | `matchBudget(food, budget)` | 判断食物是否命中某个预算档位（区间求交集） |
 | `BUDGETS` | 预算档位定义：不限 / 20 元以内 / 20–40 元 / 40 元以上 |
@@ -726,9 +730,9 @@ export const SHORT_NAMES = {
 - **「这个不要」不持久**：存在 `sessionStorage`，关闭标签页即失效，属于刻意设计（避免长期压制某个食物）
 - **历史记录有上限**：只保留最近 60 条，超出后自动丢弃最旧的记录
 - **无后端**：没有服务端接口，无法做多端排行榜、社区推荐等需要服务端的功能
-- **转盘候选数量有限**：扇区固定为 8–10 个，不会把全部 101 种食物同时放上转盘
+- **转盘候选数量有限**：最多 10 个，少于两个时采用空状态或直接结果
 - **未使用 TypeScript**：纯 JavaScript，类型约束依赖约定与运行时校验
-- **未内置单元测试**：`package.json` 中没有配置测试脚本与测试框架
+- **测试范围**：数据/算法/存储自检及 Chromium 手机视口回归；真实 iOS Safari 安装仍建议在设备上验证
 - **PWA 依赖 HTTPS**：Service Worker 只在 HTTPS（或 `localhost`）下生效；部署到 HTTP 站点时将失去离线能力
 - **iOS 安装入口仅限 Safari**：iPhone 上必须用 Safari 的「分享 → 添加到主屏幕」，「添加到主屏」后才有独立窗口体验
 - **GitHub Pages 项目站点需手动改配置**：部署到子路径时需自行设置 `vite.config.js` 的 `base` 并同步调整若干绝对路径，详见[方案四](#方案四github-pages)

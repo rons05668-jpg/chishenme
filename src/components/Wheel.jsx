@@ -31,7 +31,7 @@ const polar = (radius, angleDeg) => {
 
 /**
  * 幸运转盘
- * items     候选食物列表（8–12 个）
+ * items     候选食物列表（2–10 个；零和单候选由页面处理）
  * context   { history, favorites, dislikes }，用于加权决定最终结果
  * onResult  旋转结束后回调，参数为命中的食物
  */
@@ -57,6 +57,9 @@ export default function Wheel({
   const segmentAngle = count ? 360 / count : 0
 
   useEffect(() => {
+    clearTimeout(timerRef.current)
+    pendingRef.current = null
+    setSpinning(false)
     setWinnerIndex(-1)
   }, [items])
 

@@ -6,6 +6,8 @@ import {
   loadFavorites,
   loadHistory,
   loadStats,
+  loadExclusions,
+  saveExclusions,
   saveDislikes,
   saveFavorites,
   saveHistory,
@@ -19,6 +21,7 @@ export function AppStateProvider({ children }) {
   const [favorites, setFavorites] = useState(() => loadFavorites())
   const [dislikes, setDislikes] = useState(() => loadDislikes())
   const [stats, setStats] = useState(() => loadStats())
+  const [exclusions, setExclusions] = useState(() => loadExclusions())
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
 
@@ -27,6 +30,7 @@ export function AppStateProvider({ children }) {
   useEffect(() => saveFavorites(favorites), [favorites])
   useEffect(() => saveDislikes(dislikes), [dislikes])
   useEffect(() => saveStats(stats), [stats])
+  useEffect(() => saveExclusions(exclusions), [exclusions])
 
   useEffect(() => () => clearTimeout(toastTimer.current), [])
 
@@ -86,6 +90,8 @@ export function AppStateProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      exclusions,
+      setExclusions,
       history,
       favorites,
       dislikes,
@@ -102,6 +108,7 @@ export function AppStateProvider({ children }) {
       resetDislikes,
     }),
     [
+      exclusions,
       history,
       favorites,
       dislikes,

@@ -90,6 +90,7 @@ async function main() {
   const foodsMod = await import(pathToFileURL(path.join(SRC, 'data', 'foods.js')).href)
   const pickerMod = await import(pathToFileURL(path.join(SRC, 'lib', 'picker.js')).href)
   const filtersMod = await import(pathToFileURL(path.join(SRC, 'lib', 'filters.js')).href)
+  const storage = await import(pathToFileURL(path.join(SRC, 'lib', 'storage.js')).href)
 
   const {
     FOODS,
@@ -121,9 +122,11 @@ async function main() {
 
   /* ------------------------- 数据完整性 ------------------------- */
 
-  check('01 食物条目数 ≥ 80', () => {
+  check('01 食物条目数与名称无重复', () => {
     assert(Number.isInteger(FOODS.length), 'FOODS 不是数组')
-    assert(FOODS.length >= 80, `条目数不足：实际 ${FOODS.length} 条`)
+    assert(FOODS.length === 249, `期望 249 条：实际 ${FOODS.length} 条`)
+    assert(new Set(FOODS.map((f) => f.name.trim())).size === FOODS.length, '存在重复名称')
+    assert(CATEGORIES.length === 11, '应有 11 个食物类型')
     return `${FOODS.length} 条`
   })
 
@@ -219,9 +222,9 @@ async function main() {
   })
 
   check('08 按 category / taste 筛选结果纯净', () => {
-    const hotpot = filterFoods({ ...defaultPickerFilters, category: '火锅' })
+    const hotpot = filterFoods({ ...defaultPickerFilters, category: '火锅锅物' })
     assert(hotpot.length > 0, 'category=火锅 结果为空')
-    const wrongHotpot = hotpot.filter((food) => food.category !== '火锅')
+    const wrongHotpot = hotpot.filter((food) => food.category !== '火锅锅物')
     assert(wrongHotpot.length === 0, `火锅结果混入：${wrongHotpot.map((f) => f.category).join(', ')}`)
 
     const spicy = filterFoods({ ...defaultPickerFilters, taste: '辣' })
@@ -351,12 +354,12 @@ async function main() {
     return `抽 10 得 10 且不重复；候选不足时返回全部 ${allOfSmall.length} 条`
   })
 
-  check('15 buildWheelPool 极端条件仍返回 8–12 条', () => {
+  check('15 buildWheelPool 严格遵守筛选且不重复', () => {
     const scenarios = [
-      { budgetKey: 'high', taste: '重口', category: '西餐', scene: '出去吃' },
-      { budgetKey: 'cheap', taste: '辣', category: '西餐', scene: '食堂' },
-      { budgetKey: 'cheap', taste: '清淡', category: '火锅', scene: '食堂' },
-      { budgetKey: 'mid', taste: '重口', category: '快餐', scene: '食堂' },
+      { budgetKey: 'high', taste: '重口', category: '西式主菜', scene: '出去吃' },
+      { budgetKey: 'cheap', taste: '辣', category: '西式主菜', scene: '食堂' },
+      { budgetKey: 'cheap', taste: '清淡', category: '火锅锅物', scene: '食堂' },
+      { budgetKey: 'mid', taste: '重口', category: '快餐简餐', scene: '食堂' },
       { budgetKey: 'any', taste: '随机', category: '随机', scene: '随机' },
     ]
 
@@ -365,7 +368,9 @@ async function main() {
       const filters = toPickerFilters(scenario)
       const pool = buildWheelPool(filters, {})
       const label = `${scenario.taste}/${scenario.category}/${scenario.scene}`
-      assert(pool.length >= 8 && pool.length <= 12, `${label} 返回 ${pool.length} 条，超出 8–12`)
+      const eligible = filterFoods(filters)
+      assert(pool.length === Math.min(12, eligible.length), '转盘数量错误')
+      assert(pool.every((food) => eligible.includes(food)), '转盘混入不符合条件的食物')
       assert(idsOf(pool).size === pool.length, `${label} 结果存在重复`)
       notes.push(`${label}=${pool.length}`)
     }
@@ -387,6 +392,78 @@ async function main() {
     assert(Array.isArray(empty) && empty.length === 0, 'shuffle([]) 应返回空数组')
 
     return `长度 ${original.length}，原数组未被修改`
+  })
+
+  check('17 新字段与独立标签有效', () => {
+    for (const food of FOODS) {
+      for (const [key, allowed] of [['cuisines', foodsMod.CUISINES], ['meals', foodsMod.MEALS], ['exclusions', foodsMod.EXCLUSIONS], ['uncertainExclusions', foodsMod.EXCLUSIONS]]) {
+        assert(Array.isArray(food[key]) && food[key].every((tag) => allowed.includes(tag)), food.id + ' 字段无效：' + key)
+        assert(new Set(food[key]).size === food[key].length, food.id + ' 重复标签')
+      }
+      assert(food.cuisines.length && food.meals.length, food.id + ' 缺少标签')
+    }
+    return '类型、地域、时段、配料字段完整'
+  })
+
+  check('18 分类语义与早餐边界', () => {
+    const byName = (name) => FOODS.find((food) => food.name === name)
+    for (const [name, category] of [['糯米鸡', '小吃点心'], ['牛排', '西式主菜'], ['冬阴功汤', '粥汤'], ['鸭血粉丝汤', '粉面'], ['大盘鸡', '家常菜'], ['铁锅炖鱼', '家常菜'], ['烤肉夹饼', '烧烤']]) {
+      assert(byName(name)?.category === category, name + ' 分类错误')
+    }
+    for (const name of ['寿司', '臭豆腐', '章鱼小丸子', '咖喱鱼蛋']) assert(!byName(name).meals.includes('早餐'), name + ' 早餐过宽')
+    assert(byName('糯米鸡').cuisines.includes('粤式'), '糯米鸡缺粤式')
+    assert(byName('椰香咖喱鸡').cuisines.includes('东南亚'), '咖喱鸡缺风味')
+    return '重点菜品归类正确'
+  })
+
+  check('19 忌口全入口复用严格排除', () => {
+    for (const tag of foodsMod.EXCLUSIONS) {
+      const filtered = filterFoods({ exclusions: [tag] })
+      assert(filtered.length > 0 && filtered.length < FOODS.length, tag + ' 排除无效')
+      for (const food of filtered) assert(pickerMod.respectsExclusions(food, [tag]), '忌口泄漏')
+      assert(buildWheelPool({ exclusions: [tag] }).every((food) => filtered.includes(food)), '转盘忌口泄漏')
+    }
+    for (const name of ['夫妻肺片', '鸭血粉丝汤']) {
+      assert(!pickerMod.respectsExclusions(FOODS.find((f) => f.name === name), ['内脏']), name + ' 漏标内脏')
+    }
+    assert(pickerMod.respectsExclusions(getFoodById('yuxiangrousi-fan'), ['鱼虾贝类']), '鱼香被误认为鱼肉')
+    return '香菜、内脏、鱼虾贝类、辣均生效'
+  })
+
+  check('20 组合筛选及零、单、双候选', () => {
+    const keys = ['category', 'taste', 'cuisine', 'meal']
+    let seen = new Set()
+    for (const category of CATEGORIES) for (const taste of TASTES) for (const cuisine of foodsMod.CUISINES) for (const meal of foodsMod.MEALS) {
+      const filters = { category, taste, cuisine, meal }
+      const eligible = filterFoods(filters)
+      const pool = buildWheelPool(filters)
+      if (eligible.length <= 2) { seen.add(eligible.length); assert(pool.length === eligible.length, '小候选错误') }
+      assert(pool.every((food) => keys.every((key) => key === 'cuisine' ? food.cuisines.includes(cuisine) : key === 'meal' ? food.meals.includes(meal) : food[key] === filters[key])), '组合筛选泄漏')
+    }
+    assert([0, 1, 2].every((n) => seen.has(n)), '缺少边界场景')
+    return '组合条件及 0/1/2 候选覆盖'
+  })
+
+  check('21 localStorage 兼容及忌口持久化', () => {
+    const data = new Map()
+    global.window = { localStorage: { getItem: (key) => data.get(key), setItem: (key, value) => data.set(key, value) } }
+    try {
+      data.set('tqsc:v1:favorites', JSON.stringify(['huangmenji', 'niupai']))
+      data.set('tqsc:v1:history', JSON.stringify([{ id: 'huangmenji', ts: 123, category: '米饭' }]))
+      storage.saveExclusions(['香菜', '内脏', '香菜', '未知'])
+      assert(storage.loadExclusions().join(',') === '香菜,内脏', '忌口读写错误')
+      assert(storage.loadFavorites().join(',') === 'huangmenji,niupai', '旧收藏被改动')
+      assert(storage.loadHistory()[0].id === 'huangmenji', '旧历史被改动')
+      data.set('tqsc:v1:exclusions', '{bad')
+      assert(storage.loadExclusions().length === 0, '损坏数据未回退')
+      data.set('tqsc:v1:exclusions', '{}')
+      assert(storage.loadExclusions().length === 0, '非数组未回退')
+      window.localStorage.getItem = () => { throw new Error('blocked') }
+      window.localStorage.setItem = () => { throw new Error('blocked') }
+      storage.saveExclusions(['辣'])
+      assert(storage.loadExclusions().length === 0, '存储禁用未回退')
+    } finally { delete global.window }
+    return '旧收藏历史保留，忌口去重持久化，损坏与禁用存储降级'
   })
 
   /* --------------------------- 输出报告 --------------------------- */

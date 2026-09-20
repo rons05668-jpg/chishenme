@@ -12,9 +12,16 @@ import { FOODS, matchBudget } from '../data/foods'
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** 条件筛选；'随机' 或 'any' 视为不限制 */
+export function respectsExclusions(food, exclusions = []) {
+  return !exclusions.some((tag) => food.exclusions.includes(tag) || food.uncertainExclusions.includes(tag))
+}
+
 export function filterFoods(filters = {}) {
-  const { budget, taste, category, scene } = filters
+  const { budget, taste, category, scene, cuisine, meal, exclusions = [] } = filters
   return FOODS.filter((food) => {
+    if (!respectsExclusions(food, exclusions)) return false
+    if (cuisine && cuisine !== '随机' && !food.cuisines.includes(cuisine)) return false
+    if (meal && meal !== '随机' && !food.meals.includes(meal)) return false
     if (!matchBudget(food, budget)) return false
     if (taste && taste !== '随机' && food.taste !== taste) return false
     if (category && category !== '随机' && food.category !== category) return false
@@ -106,34 +113,11 @@ export function shuffle(list) {
 }
 
 /**
- * 转盘候选：优先使用筛选结果；
- * 数量不足 8 个时，用「同口味 / 同类型」的食物补齐，保证转盘有 8–12 个扇区。
+ * 转盘只从严格筛选结果中抽取；保留旧参数签名供现有调用使用。
  */
-export function buildWheelPool(filters = {}, context = {}, minCount = 8, maxCount = 12) {
+export function buildWheelPool(filters = {}, context = {}, _minCount = 8, maxCount = 12) {
   const primary = filterFoods(filters)
-
-  if (primary.length >= minCount) {
-    return sampleFoods(primary, Math.min(maxCount, primary.length), context)
-  }
-
-  // 候选不足：用相似度最高的食物补齐，保证转盘扇区数量足够
-  const used = new Set(primary.map((food) => food.id))
-  const extras = FOODS.filter((food) => !used.has(food.id)).sort(
-    (a, b) => similarity(b, filters) - similarity(a, filters)
-  )
-
-  const filled = [...primary, ...extras.slice(0, minCount - primary.length)]
-  return sampleFoods(filled, Math.min(maxCount, filled.length), context)
-}
-
-/** 与筛选条件的相似度，用于补齐候选时的排序 */
-function similarity(food, filters = {}) {
-  let score = 0
-  if (filters.taste && filters.taste !== '随机' && food.taste === filters.taste) score += 2
-  if (filters.category && filters.category !== '随机' && food.category === filters.category) score += 2
-  if (filters.scene && filters.scene !== '随机' && food.scenes.includes(filters.scene)) score += 1
-  if (matchBudget(food, filters.budget)) score += 1
-  return score
+  return sampleFoods(primary, Math.min(maxCount, primary.length), context)
 }
 
 /** 按照「今天 / 昨天 / 具体日期」分组历史记录 */

@@ -219,6 +219,7 @@
 /* ============================== 随机吃什么 ============================== */
 
 .filter-panel {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -227,6 +228,23 @@
   background: rgba(255, 255, 255, 0.86);
   box-shadow: var(--shadow-sm), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(8px);
+}
+
+.filter-panel summary {
+  cursor: pointer;
+  padding: 10px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filter-panel details[open] .option-group {
+  margin-top: 12px;
+}
+
+.filter-panel:disabled .option {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pool-hint {

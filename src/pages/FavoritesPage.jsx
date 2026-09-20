@@ -4,12 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import FoodResultCard from '../components/FoodResultCard'
 import TopBar from '../components/TopBar'
 import { getFoodById, priceLabel } from '../data/foods'
-import { pickFood } from '../lib/picker'
+import { pickFood, respectsExclusions } from '../lib/picker'
 import { useAppState } from '../state/AppState'
 
 export default function FavoritesPage() {
   const {
     favorites,
+    exclusions,
     history,
     dislikes,
     toggleFavorite,
@@ -26,15 +27,16 @@ export default function FavoritesPage() {
   )
 
   const context = useMemo(() => ({ history, dislikes, favorites }), [history, dislikes, favorites])
+  const eligibleFoods = useMemo(() => favoriteFoods.filter((food) => respectsExclusions(food, exclusions)), [favoriteFoods, exclusions])
 
   const pickFromFavorites = () => {
-    if (!favoriteFoods.length) {
-      showToast('先去收藏几个喜欢的', '🤍')
+    if (!eligibleFoods.length) {
+      showToast('收藏中没有符合当前忌口的食物', '🤍')
       return
     }
     const exclude = result ? [result.id] : []
-    const candidates = favoriteFoods.filter((food) => !exclude.includes(food.id))
-    setResult(pickFood(candidates.length ? candidates : favoriteFoods, context))
+    const candidates = eligibleFoods.filter((food) => !exclude.includes(food.id))
+    setResult(pickFood(candidates.length ? candidates : eligibleFoods, context))
   }
 
   const handleEat = (food) => {
@@ -45,7 +47,7 @@ export default function FavoritesPage() {
   const handleDislike = (food) => {
     dislikeFood(food.id)
     showToast('已减少它的出现概率', '🙅')
-    const rest = favoriteFoods.filter((item) => item.id !== food.id)
+    const rest = eligibleFoods.filter((item) => item.id !== food.id)
     setResult(rest.length ? pickFood(rest, context) : null)
   }
 
@@ -84,7 +86,8 @@ export default function FavoritesPage() {
             🎲 从收藏里随机一个
           </button>
 
-          {result ? (
+          {exclusions.length > 0 ? <p className="tiny">按已保存忌口筛选：{eligibleFoods.length} 个可选，收藏记录均保留。</p> : null}
+          {result && respectsExclusions(result, exclusions) ? (
             <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
               <FoodResultCard
                 food={result}
@@ -105,7 +108,7 @@ export default function FavoritesPage() {
                 <motion.button
                   type="button"
                   className="fav-card"
-                  onClick={() => setResult(food)}
+                  onClick={() => respectsExclusions(food, exclusions) ? setResult(food) : showToast('这道食物与当前忌口冲突，请先调整忌口', '🤔')}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(index * 0.03, 0.24), duration: 0.3 }}

@@ -9,6 +9,8 @@ export const DEFAULT_FILTERS = {
   taste: '随机',
   category: '随机',
   scene: '随机',
+  cuisine: '随机',
+  meal: '随机',
 }
 
 /** 把 UI 上的筛选状态转换成推荐算法需要的结构 */
@@ -18,6 +20,9 @@ export function toPickerFilters(filters) {
     taste: filters.taste,
     category: filters.category,
     scene: filters.scene,
+    cuisine: filters.cuisine,
+    meal: filters.meal,
+    exclusions: filters.exclusions || [],
   }
 }
 
@@ -29,6 +34,9 @@ export function summarizeFilters(filters) {
     filters.taste,
     filters.category,
     filters.scene,
+    filters.cuisine,
+    filters.meal,
+    ...(filters.exclusions || []).map((tag) => '不吃' + tag),
   ]
-  return parts.join(' · ')
+  return parts.filter(Boolean).join(' · ')
 }

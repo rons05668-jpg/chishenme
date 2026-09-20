@@ -6,13 +6,20 @@
  *  name     食物名称
  *  emoji    展示用表情
  *  price    [最低价, 最高价]，单位：元
- *  category 米饭 / 面食 / 粉面 / 火锅 / 小吃 / 快餐 / 西餐
+ *  category 食物类型（原条目在统一导出时映射到 CATEGORIES）
+ *  cuisines / meals 独立风味 / 时段标签
+ *  exclusions / uncertainExclusions 常见 / 需确认的忌口配料
  *  taste    清淡 / 微辣 / 辣 / 重口
  *  scenes   适合场景：食堂 / 外卖 / 出去吃
  *  desc     一句话描述（结果卡片展示）
  */
 
-export const CATEGORIES = ['米饭', '面食', '粉面', '火锅', '小吃', '快餐', '西餐']
+import { EXTRA_FOODS, enrichFood } from './food-metadata.js'
+
+export const CATEGORIES = ['米饭', '粉面', '包饺饼类', '火锅锅物', '家常菜', '烧烤', '小吃点心', '西式主菜', '快餐简餐', '粥汤', '甜品烘焙']
+export const CUISINES = ['家常', '川渝', '粤式', '江浙', '东北', '西北', '华北', '湘式', '云贵', '日韩', '东南亚', '西式']
+export const MEALS = ['早餐', '午餐', '晚餐', '下午茶', '夜宵']
+export const EXCLUSIONS = ['香菜', '内脏', '鱼虾贝类', '辣']
 export const TASTES = ['清淡', '微辣', '辣', '重口']
 export const SCENES = ['食堂', '外卖', '出去吃']
 export const BUDGETS = [
@@ -22,7 +29,7 @@ export const BUDGETS = [
   { key: 'high', label: '40元以上', min: 40, max: Infinity },
 ]
 
-export const FOODS = [
+const BASE_FOODS = [
   /* ---------------- 米饭 ---------------- */
   {
     id: 'huangmenji',
@@ -1048,6 +1055,9 @@ export const FOODS = [
   },
 ]
 
+// 保留所有原始 ID；category 表示食物类型，地域与时段独立存储。
+export const FOODS = [...BASE_FOODS, ...EXTRA_FOODS].map(enrichFood)
+
 /** id -> food 的快速索引 */
 export const FOOD_MAP = FOODS.reduce((acc, food) => {
   acc[food.id] = food
@@ -1086,7 +1096,7 @@ export const SHORT_NAMES = {
   jianbing: '煎饼',
 }
 
-export const shortName = (food) => SHORT_NAMES[food.id] || food.name
+export const shortName = (food) => SHORT_NAMES[food.id] || food.shortName || [...food.name].slice(0, 4).join('')
 
 /** 价格区间展示文案，例如 ¥15–25 */
 export const priceLabel = (food) => `¥${food.price[0]}–${food.price[1]}`

@@ -83,18 +83,25 @@ export default function FavoritesPage() {
     return parts.length ? parts.join(' · ') : '喜欢的先存起来'
   }, [favoriteFoods.length, favoriteDrinks.length])
 
+  /*
+   * 整页空态只在「食物与饮品都没有收藏」时出现。
+   * 若仅饮品有收藏，页面顶部已显示「N 款饮品」，此时再挂一个
+   * 「还没有收藏」的大空态会与副标题自相矛盾（用户会以为什么都没收藏）。
+   */
+  const nothingFavorited = favoriteFoods.length === 0 && favoriteDrinks.length === 0
+
   return (
     <div className="page">
       <TopBar title="我的收藏" subtitle={subtitle} />
 
-      {favoriteFoods.length === 0 ? (
+      {nothingFavorited ? (
         <div className="empty">
           <span className="empty__emoji" aria-hidden="true">
             🤍
           </span>
           <span className="empty__title">还没有收藏</span>
           <span className="empty__text">
-            抽到喜欢的食物时点一下「收藏」，下次就能直接从收藏里挑。
+            抽到喜欢的食物或饮品时点一下「收藏」，下次就能直接从收藏里挑。
           </span>
           <button
             type="button"
@@ -105,6 +112,8 @@ export default function FavoritesPage() {
             🎲 去随机一个
           </button>
         </div>
+      ) : favoriteFoods.length === 0 ? (
+        <p className="tiny">还没有收藏的食物。抽到喜欢的点一下「收藏」就行。</p>
       ) : (
         <>
           <button

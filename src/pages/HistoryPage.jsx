@@ -131,14 +131,19 @@ export default function HistoryPage() {
         }
       />
 
-      {history.length === 0 ? (
+      {/*
+        空态只在「食物与饮品都没有记录」时出现。
+        若仅饮品有记录，页面顶部已显示「N 条饮品记录」，此时挂一个
+        「还没有吃过记录」的大空态会与副标题自相矛盾。
+      */}
+      {history.length === 0 && drinkCount === 0 ? (
         <div className="empty">
           <span className="empty__emoji" aria-hidden="true">
             🍽️
           </span>
-          <span className="empty__title">还没有吃过记录</span>
+          <span className="empty__title">还没有记录</span>
           <span className="empty__text">
-            每次点「就吃这个」，这里就会自动记下吃了什么、什么时候吃的。
+            点「就吃这个」或「就喝这个」，这里就会自动记下时间和内容。
           </span>
           <button
             type="button"
@@ -149,6 +154,8 @@ export default function HistoryPage() {
             🎲 去随机一个
           </button>
         </div>
+      ) : history.length === 0 ? (
+        <p className="tiny">还没有吃过记录。在随机页点「就吃这个」就会记在这里。</p>
       ) : (
         groups.map((group, groupIndex) => (
           <motion.section

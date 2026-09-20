@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import BackupPanel from '../components/BackupPanel'
 import FoodResultCard from '../components/FoodResultCard'
 import TopBar from '../components/TopBar'
+import { drinkPriceLabel, getDrinkById } from '../data/drinks'
+import { getBrandById } from '../data/brands'
 import { getFoodById, priceLabel } from '../data/foods'
 import { pickFood, respectsExclusions } from '../lib/picker'
 import { useAppState } from '../state/AppState'
@@ -17,6 +19,8 @@ export default function FavoritesPage() {
     toggleFavorite,
     recordEaten,
     dislikeFood,
+    drinkFavorites,
+    toggleDrinkFavorite,
     showToast,
   } = useAppState()
   const navigate = useNavigate()
@@ -25,6 +29,22 @@ export default function FavoritesPage() {
   const favoriteFoods = useMemo(
     () => favorites.map(getFoodById).filter(Boolean).reverse(),
     [favorites]
+  )
+
+  /*
+   * 饮品收藏：独立的存储键与 id 空间（`drink-` 前缀），与食物收藏互不污染。
+   * filter(Boolean) 是硬性要求：饮品数据里可能存在已被删除的 id，
+   * getDrinkById 对未知 id 返回 null，不过滤会让下面读 brand.name 时崩页。
+   */
+  const favoriteDrinks = useMemo(
+    () => drinkFavorites
+      .map((drinkId) => {
+        const drink = getDrinkById(drinkId)
+        return drink ? { drink, brand: getBrandById(drink.brandId) } : null
+      })
+      .filter(Boolean)
+      .reverse(),
+    [drinkFavorites]
   )
 
   const context = useMemo(() => ({ history, dislikes, favorites }), [history, dislikes, favorites])
@@ -52,12 +72,20 @@ export default function FavoritesPage() {
     setResult(rest.length ? pickFood(rest, context) : null)
   }
 
+  /**
+   * 副标题需同时体现食物与饮品，两者数量独立统计、语义不混。
+   * 没有任何收藏时保留原文案。
+   */
+  const subtitle = useMemo(() => {
+    const parts = []
+    if (favoriteFoods.length) parts.push(`已收藏 ${favoriteFoods.length} 个食物`)
+    if (favoriteDrinks.length) parts.push(`${favoriteDrinks.length} 款饮品`)
+    return parts.length ? parts.join(' · ') : '喜欢的先存起来'
+  }, [favoriteFoods.length, favoriteDrinks.length])
+
   return (
     <div className="page">
-      <TopBar
-        title="我的收藏"
-        subtitle={favoriteFoods.length ? `已收藏 ${favoriteFoods.length} 个` : '喜欢的先存起来'}
-      />
+      <TopBar title="我的收藏" subtitle={subtitle} />
 
       {favoriteFoods.length === 0 ? (
         <div className="empty">
@@ -140,6 +168,47 @@ export default function FavoritesPage() {
           </div>
         </>
       )}
+
+      {/* 饮品收藏独立分区：与食物收藏同页但互不影响，为空时整体不渲染 */}
+      {favoriteDrinks.length ? (
+        <>
+          <div className="section-title">🧋 收藏的饮品</div>
+          <div className="fav-grid">
+            {favoriteDrinks.map(({ drink, brand }, index) => (
+              <div key={drink.id} className="fav-item">
+                <motion.button
+                  type="button"
+                  className="fav-card"
+                  onClick={() => navigate('/drink')}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(index * 0.03, 0.24), duration: 0.3 }}
+                >
+                  <span className="fav-card__emoji" aria-hidden="true">
+                    🥤
+                  </span>
+                  <span className="fav-card__name">
+                    {brand ? `${brand.name} · ${drink.name}` : drink.name}
+                  </span>
+                  <span className="fav-card__meta">{drinkPriceLabel(drink)}</span>
+                </motion.button>
+
+                <button
+                  type="button"
+                  className="fav-card__heart"
+                  aria-label={`取消收藏 ${drink.name}`}
+                  onClick={() => {
+                    toggleDrinkFavorite(drink.id)
+                    showToast('已取消饮品收藏', '🤍')
+                  }}
+                >
+                  ❤️
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       {/* 备份面板放在页面最底部：空态与有收藏时都能看到 */}
       <BackupPanel />

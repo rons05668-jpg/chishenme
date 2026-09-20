@@ -85,6 +85,31 @@ export default function HomePage() {
         </motion.button>
       </section>
 
+      {/*
+        「喝什么」入口单独成区，而不是往底部导航塞第 5 个 tab：
+        底部导航在手机端空间有限，加 tab 会让主功能变挤；
+        这里用一张跨列的大卡片做入口，视觉上清晰且不占用导航位。
+      */}
+      <motion.button
+        type="button"
+        className="mode-card mode-card--drink"
+        onClick={() => navigate('/drink')}
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.4, ease: [0.22, 0.9, 0.3, 1] }}
+      >
+        <span className="mode-card__icon" aria-hidden="true">
+          🧋
+        </span>
+        <span className="mode-card__body">
+          <span className="mode-card__title">今天喝什么</span>
+          <span className="mode-card__desc">选品牌和预算，随机决定喝哪一杯</span>
+        </span>
+        <span className="mode-card__arrow" aria-hidden="true">
+          →
+        </span>
+      </motion.button>
+
       {last ? (
         <section className="last-decision animate-rise">
           <span className="last-decision__emoji" aria-hidden="true">

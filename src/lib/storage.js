@@ -11,6 +11,7 @@
  */
 
 import { BUDGETS, CATEGORIES, CUISINES, EXCLUSIONS, MEALS, SCENES, TASTES, getFoodById } from '../data/foods'
+import { BRANDS } from '../data/brands'
 import {
   CAFFEINE_LEVELS,
   DRINK_BUDGETS,
@@ -19,6 +20,7 @@ import {
   DRINK_SCENES,
   SUGAR_LEVELS,
   TEMPERATURES,
+  drinkEmoji,
   getDrinkById,
 } from '../data/drinks'
 
@@ -342,7 +344,7 @@ export function saveFilterPrefs(prefs) {
 /**
  * 单条饮料历史记录校验。
  * 与食物历史保持同一套兼容策略：只要求 id 与 ts 有效。
- * 展字段（name / emoji / category / sugar）缺失时由 getDrinkById(id) 还原，
+ * 展示字段（name / emoji / category / sugar）缺失时由 getDrinkById(id) 还原，
  * 因缺少展示字段就丢弃用户历史是不可接受的。
  */
 function isValidDrinkHistoryRecord(item) {
@@ -352,16 +354,20 @@ function isValidDrinkHistoryRecord(item) {
   return true
 }
 
-/** 补全饮料历史记录的展示字段：taste 位置存放饮料的 sugar（甜度） */
+/** 补全饮料历史记录的展示字段：taste 位置存放饮料的可选甜度摘要 */
 function normalizeDrinkHistoryRecord(item) {
   const drink = getDrinkById(item.id)
   return {
     uid: isNonEmptyString(item.uid) ? item.uid : `${item.id}@${item.ts}`,
     id: item.id,
     name: isNonEmptyString(item.name) ? item.name : drink?.name || item.id,
-    emoji: isNonEmptyString(item.emoji) ? item.emoji : drink?.emoji || '🥤',
+    emoji: isNonEmptyString(item.emoji) ? item.emoji : (drink ? drinkEmoji(drink) : '🥤'),
     category: isNonEmptyString(item.category) ? item.category : drink?.category || '',
-    taste: isNonEmptyString(item.taste) ? item.taste : drink?.sugar || '',
+    taste: isNonEmptyString(item.taste)
+      ? item.taste
+      : drink?.sweetness?.length
+        ? drink.sweetness.join('/')
+        : '',
     ts: item.ts,
   }
 }
@@ -383,9 +389,11 @@ export function createDrinkHistoryRecord(drink) {
     uid: `${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
     id: drink.id,
     name: drink.name,
-    emoji: drink.emoji,
+    // 按品类派生本地 emoji（数据里没有 per-SKU 的 emoji 字段，不臆造商品图）
+    emoji: drinkEmoji(drink),
     category: drink.category,
-    taste: drink.sugar,
+    // sweetness 是数组（官方公示的可选糖度），历史记录里只存一个可读摘要
+    taste: drink.sweetness.length ? drink.sweetness.join('/') : null,
     ts: now.getTime(),
   }
 }
@@ -455,6 +463,7 @@ export function saveDrinkExclusions(list) {
 
 /** 饮料筛选偏好结构与默认值（与饮料数据层的枚举保持一致） */
 export const DEFAULT_DRINK_PREFS = Object.freeze({
+  brand: '随机',
   budgetKey: 'any',
   temperature: '随机',
   category: '随机',
@@ -464,6 +473,7 @@ export const DEFAULT_DRINK_PREFS = Object.freeze({
 })
 
 const DRINK_BUDGET_KEYS = DRINK_BUDGETS.map((item) => item.key)
+const BRAND_IDS = BRANDS.map((brand) => brand.id)
 
 /**
  * 校验并规整饮料筛选偏好。
@@ -473,6 +483,11 @@ const DRINK_BUDGET_KEYS = DRINK_BUDGETS.map((item) => item.key)
 export function normalizeDrinkPrefs(raw) {
   const source = isPlainObject(raw) ? raw : {}
   return {
+    /*
+     * brand 存入的是品牌 id（如 'mxbc'），校验时对着品牌表比对，
+     * 避免品牌数据调整后旧偏好里残留已不存在的 brandId 导致筛选恒为零候选。
+     */
+    brand: normalizeEnum(source.brand, ['随机', ...BRAND_IDS], DEFAULT_DRINK_PREFS.brand),
     budgetKey: normalizeEnum(
       typeof source.budgetKey === 'string' ? source.budgetKey : String(source.budgetKey ?? ''),
       DRINK_BUDGET_KEYS,

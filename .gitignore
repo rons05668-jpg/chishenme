@@ -36,3 +36,10 @@ pnpm-debug.log*
 .env*
 playwright-report/
 test-results/
+
+# 数据核验的临时工作区与中间产物（含抓取的网页快照、招股书 PDF 等，
+# 可能夹带本地网络环境信息；核验结论已固化进 src/data 的 sources 字段）
+scripts/_audit/
+scripts/_merged_drinks.txt
+scripts/_*.mjs
+scripts/_*.cjs

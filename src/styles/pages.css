@@ -162,6 +162,22 @@
   animation: float-soft 3.6s ease-in-out infinite;
 }
 
+/*
+ * 「今天喝什么」入口。
+ * 沿用 mode-grid 中卡片的外观语言，但单独占一行（跨列），
+ * 与「吃什么」的两张主卡形成清晰的层级区分。
+ */
+.mode-card--drink {
+  margin-top: 12px;
+  color: #fff;
+  background-image: linear-gradient(135deg, #8fd3c7 0%, #4bb3a1 55%, #2e9483 100%);
+  box-shadow: 0 12px 26px rgba(75, 179, 161, 0.3);
+}
+
+.mode-card--drink .mode-card__icon {
+  animation: float-soft 3.6s ease-in-out infinite;
+}
+
 /* 首页下方快捷区 */
 .quick-row {
   display: grid;
@@ -345,6 +361,37 @@
   font-size: 30px;
   font-weight: 900;
   letter-spacing: -0.8px;
+}
+
+/*
+ * 品牌名作为饮品结果的主标识之一，需要比普通 eyebrow 更醒目，
+ * 让用户一眼看到「哪个品牌的哪款饮品」。
+ */
+.result-card__brand {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--primary-ink);
+}
+
+/* 价格与在售状态的免责说明：弱化处理，不抢主信息注意力 */
+.drink-disclaimer {
+  position: relative;
+  margin-top: 10px;
+  color: var(--text-3);
+}
+
+/* 抽样规则说明：常态展示，弱化但可读 */
+.drink-sampling-note {
+  margin-top: 10px;
+  color: var(--text-3);
+  line-height: 1.6;
 }
 
 .result-card__price {

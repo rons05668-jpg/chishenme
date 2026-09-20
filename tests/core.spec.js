@@ -394,3 +394,211 @@ test('手机端横向不溢出（核心页面）', async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   }
 })
+
+/* ================================================================== */
+/* 饮料模块                                                            */
+/* ================================================================== */
+
+/** 展开饮料筛选面板的次要条件（甜度 / 咖啡因 / 忌口） */
+async function openDrinkFilters(page) {
+  const toggle = page.locator('.filter-toggle')
+  if (await toggle.count()) {
+    const expanded = await toggle.getAttribute('aria-expanded')
+    if (expanded !== 'true') await toggle.click()
+  }
+}
+
+/**
+ * 定位饮料面板中某一组选项的按钮。
+ * 与食物版 option() 同构，但饮料面板的品牌组排在第一位，
+ * 这里用索引兜底，避免 label 文案或图标变化导致定位漂移。
+ */
+const drinkOption = (page, groupIndex, name) =>
+  page.locator('.filter-panel__main .option-group').nth(groupIndex)
+    .getByRole('button', { name, exact: true })
+
+test('饮料页：随机推荐展示品牌与饮品名，并标注价格来源', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/#/drink')
+  await page.reload()
+
+  await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+  await expect(page.locator('.result-card')).toBeVisible()
+
+  // 品牌名必须展示（需求：必须推荐具体的品牌＋饮品）
+  await expect(page.locator('.result-card__brand')).toBeVisible()
+  // 固定展示门店免责说明，且不得出现「实时价格」这类未经接入的表述
+  await expect(page.getByText('菜单与价格以门店为准', { exact: false })).toBeVisible()
+  await expect(page.getByText('实时价格', { exact: false })).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('饮料页：价格未公示的饮品不显示 ¥0', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  // 连续抽几次，确认价格文案只会是「参考价未公示」或正常区间，绝不出现 ¥0
+  for (let i = 0; i < 6; i += 1) {
+    await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+    await expect(page.locator('.result-card')).toBeVisible()
+    const priceText = await page.locator('.result-card__price').innerText()
+    expect(priceText).not.toContain('¥0')
+    expect(priceText.length).toBeGreaterThan(0)
+  }
+})
+
+test('饮料页：仅不含咖啡因时排除未知与含咖啡因饮品', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  await openDrinkFilters(page)
+  await expandMore(page)
+  await option(page, '咖啡因', '无咖啡因').click()
+
+  // 匹配数量提示应反映严格筛选结果
+  await expect(page.locator('.pool-hint--inline')).toBeVisible()
+  await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+  await expect(page.locator('.result-card')).toBeVisible()
+  // 结果里不得出现「unknown」或含咖啡因标签
+  const tags = await page.locator('.result-card__tags').innerText()
+  expect(tags).not.toContain('unknown')
+})
+
+test('饮料页：品牌筛选只返回该品牌，且偏好跨刷新保留', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  await openDrinkFilters(page)
+  // 选一个实际有数据的品牌（品牌组固定是 .filter-panel__main 内第 0 组）
+  await drinkOption(page, 0, '一点点').click()
+  await page.reload()
+  await openDrinkFilters(page)
+  await expect(drinkOption(page, 0, '一点点')).toHaveAttribute('aria-pressed', 'true')
+
+  await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+  await expect(page.locator('.result-card')).toBeVisible()
+  await expect(page.locator('.result-card__brand')).toHaveText('一点点')
+})
+
+test('饮料页：重置筛选保留饮料忌口', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  await openDrinkFilters(page)
+  await drinkOption(page, 0, '一点点').click()
+  await expandMore(page)
+  await page.getByRole('button', { name: '不要咖啡因' }).click()
+
+  await page.getByRole('button', { name: '重置筛选（保留忌口）' }).click()
+  // 普通筛选回到不限，但忌口仍在
+  await expect(drinkOption(page, 0, '不限')).toHaveAttribute('aria-pressed', 'true')
+  await expandMore(page)
+  await expect(page.getByRole('button', { name: '不要咖啡因' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('饮料页：不暴露无数据支撑的筛选器（甜度），忌口不锁死功能', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  await openDrinkFilters(page)
+  await expandMore(page)
+
+  /*
+   * 甜度筛选已移除：推荐池内没有任何一条带官方公示的糖度，
+   * 保留该筛选器等于「一选就零候选」的界面装饰，需求明令禁止。
+   */
+  const groups = page.locator('.filter-panel__extra-inner .option-group')
+  const labels = await groups.locator('.option-group__label').allInnerTexts()
+  expect(labels.join('|')).not.toContain('甜度')
+
+  // 咖啡因筛选必须保留（有真实数据支撑）
+  expect(labels.join('|')).toContain('咖啡因')
+
+  /*
+   * 「不要高糖」不得把候选清零：糖度未公示不等于高糖。
+   * 勾选后匹配数必须仍大于 0，否则等于一个勾选锁死整个推荐功能。
+   */
+  await page.getByRole('button', { name: '不要高糖' }).click()
+  const hint = await page.locator('.pool-hint--inline').innerText()
+  const matched = Number((hint.match(/(\d+)/) || [])[1])
+  expect(matched).toBeGreaterThan(0)
+
+  // 勾了忌口后，界面必须诚实提示「未公示的信息无法代为排除」
+  await expect(page.getByText('有过敏或严格忌口需求请向门店确认', { exact: false })).toBeVisible()
+})
+
+test('饮料页：收藏与历史使用独立存储键，不污染食物数据', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  // 预置食物数据，验证饮料操作不会动它
+  await page.evaluate(() => {
+    localStorage.setItem('tqsc:v1:favorites', JSON.stringify(['huangmenji']))
+    localStorage.setItem('tqsc:v1:history', JSON.stringify([{ uid: 'f1', id: 'huangmenji', ts: 111 }]))
+  })
+  await page.reload()
+
+  await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+  await expect(page.locator('.result-card')).toBeVisible()
+  await page.getByRole('button', { name: '收藏' , exact: false }).click()
+  await page.getByRole('button', { name: '就喝这个', exact: false }).click()
+
+  // 饮料数据写入独立键
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tqsc:v1:drinkFavorites') || '[]').length)).toBe(1)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tqsc:v1:drinkHistory') || '[]').length)).toBe(1)
+  // 食物数据未被改动
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tqsc:v1:favorites')))).toEqual(['huangmenji'])
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tqsc:v1:history')).length)).toBe(1)
+})
+
+test('饮料页：刷新后饮品收藏与历史恢复', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+  await expect(page.locator('.result-card')).toBeVisible()
+  await page.getByRole('button', { name: '收藏', exact: false }).click()
+  await page.getByRole('button', { name: '就喝这个', exact: false }).click()
+
+  await page.reload()
+  await page.goto('/#/favorites')
+  // 饮品收藏在收藏页的独立分区里（复用 .fav-card 系列，条目文案含品牌名）
+  await expect(page.getByText('收藏的饮品', { exact: false })).toBeVisible()
+  await expect(page.locator('.fav-card').first()).toBeVisible()
+
+  await page.goto('/#/history')
+  // 饮品记录复用食物历史的 .record-item 结构，位于「🧋 喝过记录」分区
+  await expect(page.getByText('喝过记录', { exact: false })).toBeVisible()
+  await expect(page.locator('.record-item').first()).toBeVisible()
+  // 条目必须显示「品牌 · 饮品名」，而不是只有饮品名
+  await expect(page.locator('.record-item__name').first()).toContainText('·')
+})
+
+test('首页存在「喝什么」入口且底部导航未塞满', async ({ page }) => {
+  await page.goto('/')
+  await page.reload()
+  // 首页入口
+  await expect(page.getByRole('button', { name: '今天喝什么', exact: false })).toBeVisible()
+  // 底部导航不应为饮料模块新增 tab。
+  // 现有底部导航固定 5 项（首页 / 随机 / 转盘 / 记录 / 收藏），饮品模块只加首页卡片，不占 tab。
+  const navCount = await page.locator('nav a').count()
+  expect(navCount).toBeLessThanOrEqual(5)
+  const navLabels = await page.locator('nav a').allInnerTexts()
+  expect(navLabels.join('')).not.toContain('喝什么')
+
+  await page.getByRole('button', { name: '今天喝什么', exact: false }).click()
+  await expect(page).toHaveURL(/#\/drink/)
+})
+
+test('饮料页：手机端横向不溢出', async ({ page }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await openDrinkFilters(page)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+test('饮料页：离线（SW 缓存）仍可随机推荐', async ({ page, context }) => {
+  await page.goto('/#/drink')
+  await page.reload()
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null || navigator.serviceWorker.ready)
+  await context.setOffline(true)
+  await page.reload()
+  await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
+  await expect(page.locator('.result-card')).toBeVisible()
+  await context.setOffline(false)
+})

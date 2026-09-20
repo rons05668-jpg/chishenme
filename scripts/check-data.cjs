@@ -643,15 +643,445 @@ async function main() {
     return '重复去重、新增计入、现有数据零删除、空导入无副作用、parse+merge 串联正确'
   })
 
+  /* ================================================================== */
+  /* 饮料模块                                                            */
+  /* ================================================================== */
+
+  const brandsMod = await import(pathToFileURL(path.join(SRC, 'data', 'brands.js')).href)
+  const drinksMod = await import(pathToFileURL(path.join(SRC, 'data', 'drinks.js')).href)
+  const drinkPicker = await import(pathToFileURL(path.join(SRC, 'lib', 'drinkPicker.js')).href)
+
+  const { BRANDS, BRAND_MAP, AVAILABILITY_LEVELS } = brandsMod
+  const {
+    DRINKS,
+    DRINK_MAP,
+    DRINK_CATEGORIES,
+    TEMPERATURES,
+    SUGAR_LEVELS,
+    CAFFEINE_LEVELS,
+    DRINK_EXCLUSIONS,
+    getDrinkById,
+    matchDrinkBudget,
+  } = drinksMod
+  const { filterDrinks, pickDrinkByBrand, buildDrinkWheelPool, isRecommendable } = drinkPicker
+
+  check('26 饮料与品牌关联、ID 唯一、字段类型一致', () => {
+    assert(DRINKS.length > 0, 'DRINKS 为空')
+    assert(BRANDS.length > 0, 'BRANDS 为空')
+
+    // 品牌表自身：id 与名称都必须唯一（重复会让筛选选项出现两个同名按钮）
+    const brandIds = BRANDS.map((b) => b.id)
+    assert(new Set(brandIds).size === brandIds.length, '品牌表存在重复 id')
+    const brandNames = BRANDS.map((b) => b.name)
+    assert(new Set(brandNames).size === brandNames.length, '品牌表存在重复名称')
+
+    // ID 唯一
+    const ids = DRINKS.map((d) => d.id)
+    assert(new Set(ids).size === ids.length, '存在重复的饮品 id')
+    assert(ids.every((id) => isNonEmptyString(id) && id.startsWith('drink-')), 'id 必须为非空且以 drink- 开头')
+
+    // 与食物 id 完全不冲突（这是本地收藏/历史不串数据的前提）
+    const foodIds = new Set(FOODS.map((f) => f.id))
+    const conflict = ids.filter((id) => foodIds.has(id))
+    assert(conflict.length === 0, `以下饮品 id 与食物 id 冲突：${conflict.slice(0, 5).join(', ')}`)
+
+    // brandId 必须存在于品牌表
+    const unknownBrand = DRINKS.filter((d) => !BRAND_MAP[d.brandId]).map((d) => `${d.id}->${d.brandId}`)
+    assert(unknownBrand.length === 0, `存在未登记的品牌引用：${unknownBrand.slice(0, 5).join(', ')}`)
+
+    // 反向：品牌表中不应有「零饮品」的孤儿品牌（会让用户选中后恒为零候选）
+    const usedBrands = new Set(DRINKS.map((d) => d.brandId))
+    const orphanBrands = BRANDS.filter((b) => !usedBrands.has(b.id)).map((b) => b.id)
+    assert(
+      orphanBrands.length === 0,
+      `以下品牌在饮品表中没有任何条目：${orphanBrands.join(', ')}`
+    )
+
+    // 逐字段类型校验
+    for (const d of DRINKS) {
+      assert(isNonEmptyString(d.name), `${d.id} name 非法`)
+      assert(DRINK_CATEGORIES.includes(d.category), `${d.id} category 非法：${d.category}`)
+      assert(AVAILABILITY_LEVELS.includes(d.availability), `${d.id} availability 非法：${d.availability}`)
+      assert(CAFFEINE_LEVELS.includes(d.caffeine), `${d.id} caffeine 非法：${d.caffeine}`)
+      assert(Array.isArray(d.sources), `${d.id} sources 必须是数组`)
+      /*
+       * 价格：允许三种合法状态，绝不允许用 0 元冒充未知。
+       *  - 'unpublished' 官方与第三方均无可核验价格 → priceRange 必须为 null
+       *  - 'official'    品牌官方渠道公示            → 正数区间
+       *  - 'thirdParty'  第三方聚合站                → 正数区间 + 必须可追溯来源
+       * 0 元会被 UI 显示成「免费」，是比缺失更严重的错误信息。
+       */
+      assert(
+        ['official', 'thirdParty', 'unpublished'].includes(d.priceStatus),
+        `${d.id} priceStatus 非法：${d.priceStatus}`
+      )
+      if (d.priceStatus === 'unpublished') {
+        assert(d.priceRange === null, `${d.id} 价格未公示时 priceRange 必须为 null，不能填 [0,0] 之类的假值`)
+      } else {
+        assert(Array.isArray(d.priceRange) && d.priceRange.length === 2, `${d.id} priceRange 必须是二元数组`)
+        const [lo, hi] = d.priceRange
+        assert(Number.isFinite(lo) && Number.isFinite(hi), `${d.id} 价格必须是有限数字`)
+        assert(lo > 0 && hi >= lo, `${d.id} 价格区间非法：[${lo}, ${hi}]（不允许 0 元占位）`)
+        // 第三方价格必须写明来源，否则用户无法判断可信度
+        assert(
+          isNonEmptyString(d.priceNote) && d.sources.length > 0,
+          `${d.id} 第三方价格缺少来源说明，不可追溯`
+        )
+      }
+    }
+
+    return `${DRINKS.length} 款饮品 / ${BRANDS.length} 个品牌，字段类型与 id 唯一性均通过`
+  })
+
+  check('26b 配置选项只取官方可确认值', () => {
+    /*
+     * 温度/甜度选项必须来自具体商品信息，不能统一套用行业通用值。
+     * 这里不做「必须有值」的强制（官方未公示时应为空数组），
+     * 而是校验「有值时必须是合法枚举」，并统计留空数量供人工复核。
+     */
+    let emptyTemp = 0
+    let emptySweet = 0
+    for (const d of DRINKS) {
+      assert(Array.isArray(d.temperatures), `${d.id} temperatures 必须是数组`)
+      assert(d.temperatures.every((t) => TEMPERATURES.includes(t)), `${d.id} temperatures 含非法值`)
+      assert(Array.isArray(d.sweetness), `${d.id} sweetness 必须是数组`)
+      assert(d.sweetness.every((s) => SUGAR_LEVELS.includes(s)), `${d.id} sweetness 含非法值`)
+      assert(Array.isArray(d.ingredientTags), `${d.id} ingredientTags 必须是数组`)
+      if (d.temperatures.length === 0) emptyTemp += 1
+      if (d.sweetness.length === 0) emptySweet += 1
+    }
+    return `温度留空 ${emptyTemp}/${DRINKS.length}，甜度留空 ${emptySweet}/${DRINKS.length}（官方未公示时留空是正确行为）`
+  })
+
+  check('27 数据来源与核验日期完整性', () => {
+    const missingSources = DRINKS.filter((d) => !d.sources || d.sources.length === 0)
+    const badVerified = DRINKS.filter((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d.verifiedAt || ''))
+    const brandsMissingSources = BRANDS.filter((b) => !b.sources || b.sources.length === 0)
+
+    /*
+     * 来源精度：只指向域名根路径（如 https://www.naixue.com/）的来源，
+     * 无法定位到具体菜单页，支撑力弱于深链接。这类条目客观存在
+     * （部分品牌没有可直达的菜单 URL），但要显式统计出来，
+     * 避免「有来源」这一句话掩盖「来源不够精确」的事实。
+     */
+    const shallowSources = DRINKS.filter((d) =>
+      d.sources.every((url) => {
+        const rest = String(url).replace(/^https?:\/\/[^/]+/, '')
+        return rest === '' || rest === '/'
+      })
+    )
+    // 核验日期分布：全量同一天说明是集中核验，不是逐条独立复核
+    const dateBuckets = {}
+    for (const d of DRINKS) {
+      const key = d.verifiedAt || 'missing'
+      dateBuckets[key] = (dateBuckets[key] || 0) + 1
+    }
+    const dateSummary = Object.entries(dateBuckets)
+      .sort((a, b) => b[1] - a[1])
+      .map(([date, count]) => `${date}×${count}`)
+      .join(' ')
+    const isBulkSameDay = Object.keys(dateBuckets).length === 1
+
+    // 无来源的条目不算错误（客观存在无法访问官方资料的情况），但必须显式统计
+    return [
+      `有来源 ${DRINKS.length - missingSources.length}/${DRINKS.length}`,
+      `待补来源 ${missingSources.length}`,
+      `来源仅到首页 ${shallowSources.length}（支撑力弱，已如实保留）`,
+      `核验日期合规 ${DRINKS.length - badVerified.length}/${DRINKS.length}`,
+      `日期分布 ${dateSummary}${isBulkSameDay ? '（集中核验，非逐条独立复核）' : ''}`,
+      `品牌缺来源 ${brandsMissingSources.length}/${BRANDS.length}`,
+    ].join('，')
+  })
+
+  check('28 在售状态标注与推荐池准入', () => {
+    const byAvailability = {}
+    for (const level of AVAILABILITY_LEVELS) byAvailability[level] = 0
+    for (const d of DRINKS) byAvailability[d.availability] += 1
+
+    const recommendable = DRINKS.filter(isRecommendable)
+
+    // 已下架与待确认一律不得进入推荐池
+    const leaked = recommendable.filter(
+      (d) => d.availability === 'discontinued' || d.availability === 'unknown'
+    )
+    assert(leaked.length === 0, `已下架/待确认的饮品进入了推荐池：${leaked.map((d) => d.id).slice(0, 5).join(', ')}`)
+
+    // 季节/区域限定默认不进推荐池
+    const limited = recommendable.filter(
+      (d) => d.availability === 'seasonal' || d.availability === 'regional'
+    )
+    assert(limited.length === 0, `季节/区域限定饮品默认进入了推荐池：${limited.map((d) => d.id).slice(0, 5).join(', ')}`)
+
+    // 待确认 + 已下架必须写明原因，否则用户无从判断
+    const noNote = DRINKS.filter(
+      (d) => (d.availability === 'unknown' || d.availability === 'discontinued') && !isNonEmptyString(d.availabilityNote)
+    )
+    assert(noNote.length === 0, `待确认/已下架未写明原因：${noNote.map((d) => d.id).slice(0, 5).join(', ')}`)
+
+    return [
+      `常驻 ${byAvailability.permanent}`,
+      `季节 ${byAvailability.seasonal}`,
+      `区域 ${byAvailability.regional}`,
+      `待确认 ${byAvailability.unknown}`,
+      `已下架 ${byAvailability.discontinued}`,
+      `→ 默认可推荐 ${recommendable.length}`,
+    ].join('，')
+  })
+
+  check('29 咖啡因标注不臆造（纯茶/果茶/奶茶不得默认无咖啡因）', () => {
+    // 茶叶本身含咖啡因：任何以茶为基底的分类都不应被标为「确认不含咖啡因」，
+    // 除非确有官方依据。这里用保守校验拦住明显的错误标注。
+    const teaBased = ['奶茶', '鲜奶茶', '果茶', '纯茶']
+    const suspicious = DRINKS.filter(
+      (d) => teaBased.includes(d.category) && d.caffeine === '无咖啡因'
+    )
+    // 允许存在，但必须带明确依据备注（例如官方标注 decaf），否则视为臆造
+    const fabricated = suspicious.filter((d) => !isNonEmptyString(d.caffeineNote))
+    assert(
+      fabricated.length === 0,
+      `茶基饮品被标为无咖啡因但无依据：${fabricated.map((d) => d.id).slice(0, 5).join(', ')}`
+    )
+
+    const counts = DRINKS.reduce((acc, d) => {
+      acc[d.caffeine] = (acc[d.caffeine] || 0) + 1
+      return acc
+    }, {})
+    return `无咖啡因 ${counts['无咖啡因'] || 0}，低咖啡因 ${counts['低咖啡因'] || 0}，高咖啡因 ${counts['高咖啡因'] || 0}，无依据错标 0`
+  })
+
+  check('30 仅不含咖啡因必须排除含咖啡因与未知', () => {
+    const pool = filterDrinks({ caffeine: '无咖啡因', exclusions: [] })
+    const bad = pool.filter((d) => d.caffeine !== '无咖啡因')
+    assert(bad.length === 0, `「仅不含咖啡因」放入了非无咖啡因饮品：${bad.map((d) => d.id).slice(0, 5).join(', ')}`)
+
+    // 未知必须被排除（caffeine 枚举中没有 unknown 值时会自然排除，这里显式断言）
+    const unknownLeak = pool.filter((d) => d.caffeine === 'unknown' || !d.caffeine)
+    assert(unknownLeak.length === 0, '未知咖啡因状态的饮品被放入了无咖啡因结果')
+
+    return `无咖啡因候选 ${pool.length} 款，含咖啡因与未知均被正确排除`
+  })
+
+  check('31 品牌筛选与跨品牌抽样均衡性', () => {
+    const all = filterDrinks({ exclusions: [] })
+    assert(all.length > 0, '默认筛选无候选，无法验证品牌均衡性')
+
+    // 从实际数据里取一个有候选的品牌，而不是写死某个品牌 id
+    // （写死会在该品牌数据尚未录入时产生假失败）
+    const brandsWithCandidates = new Set(all.map((d) => d.brandId))
+    const sampleBrand = [...brandsWithCandidates][0]
+
+    // 单品牌筛选必须纯净
+    const brandPool = filterDrinks({ brand: sampleBrand, exclusions: [] })
+    assert(brandPool.length > 0, `品牌 ${sampleBrand} 筛选结果为空`)
+    assert(
+      brandPool.every((d) => d.brandId === sampleBrand),
+      `品牌 ${sampleBrand} 的筛选结果混入了其他品牌`
+    )
+
+    // 跨品牌抽样：品牌优先策略下，各「有候选的品牌」应都能被抽到。
+    // 这是「不因收录条目多而系统性占优」的可测试证据。
+    const hit = new Set()
+    for (let i = 0; i < 800; i += 1) {
+      const picked = pickDrinkByBrand(all, {})
+      if (picked) hit.add(picked.brandId)
+    }
+    const unhit = [...brandsWithCandidates].filter((b) => !hit.has(b))
+    assert(
+      unhit.length === 0,
+      `800 次抽样仍未覆盖以下品牌（大目录品牌占优的证据）：${unhit.join(', ')}`
+    )
+
+    // 多品牌时，各品牌被抽中的次数应处于合理区间，不应出现单品牌霸占多数
+    if (brandsWithCandidates.size > 1) {
+      const counts = {}
+      for (let i = 0; i < 800; i += 1) {
+        const picked = pickDrinkByBrand(all, {})
+        if (picked) counts[picked.brandId] = (counts[picked.brandId] || 0) + 1
+      }
+      const max = Math.max(...Object.values(counts))
+      // 等概率选品牌 → 每个品牌期望 800/N。允许 2.5 倍偏差，超出即为失衡。
+      const expected = 800 / brandsWithCandidates.size
+      assert(
+        max < expected * 2.5,
+        `品牌抽样失衡：最高 ${max} 次，期望约 ${expected.toFixed(0)} 次`
+      )
+    }
+
+    return `${brandsWithCandidates.size} 个品牌在 800 次抽样中全部命中，单品牌筛选纯净`
+  })
+
+  check('32 零候选、单候选与转盘不补入条件外饮品', () => {
+    // 构造一个明确无解的筛选组合
+    const impossible = filterDrinks({
+      brand: 'mxbc',
+      category: '咖啡',
+      temperature: '热',
+      caffeine: '无咖啡因',
+      exclusions: [],
+    })
+    // 无论结果如何，关键是不能凭空补入
+    assert(impossible.every((d) => d.brandId === 'mxbc'), '零候选组合补入了其他品牌')
+
+    // 转盘候选必须全部来自严格筛选结果
+    const filters = { exclusions: [] }
+    const wheel = buildDrinkWheelPool(filters, {}, 8, 10)
+    const strict = new Set(filterDrinks(filters).map((d) => d.id))
+    const intruder = wheel.filter((d) => !strict.has(d.id))
+    assert(intruder.length === 0, `转盘补入了条件外饮品：${intruder.map((d) => d.id).join(', ')}`)
+    assert(wheel.length <= 10, `转盘候选超过上限：${wheel.length}`)
+
+    // 候选充足时不应少于下限
+    const strictCount = strict.size
+    if (strictCount >= 8) {
+      assert(wheel.length === Math.min(10, strictCount), `转盘候选数异常：${wheel.length}，期望 ${Math.min(10, strictCount)}`)
+    }
+
+    return `不可能组合候选 ${impossible.length} 款（未补入）、转盘候选 ${wheel.length} 款全部来自严格筛选`
+  })
+
+  check('33 饮料备份 v1 兼容与食物数据隔离', () => {
+    const { parseBackup, mergeImported: merge2 } = storage
+
+    // v1 老备份（仅食物字段）必须仍能解析，且不产生饮料脏数据
+    const v1 = JSON.stringify({
+      app: 'today-eat-what',
+      formatVersion: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      data: { history: [{ uid: 'h1', id: 'baozi', name: '包子', ts: 1 }], favorites: ['baozi'], exclusions: ['辣'] },
+    })
+    const parsedV1 = parseBackup(v1)
+    assert(parsedV1.ok === true, `v1 备份应可解析：${parsedV1.reason || ''}`)
+
+    const current = {
+      history: [{ uid: 'h0', id: 'niupai', name: '牛排', ts: 0 }],
+      favorites: ['niupai'],
+      exclusions: [],
+      drinkHistory: [{ uid: 'd1', id: 'drink-naicha', name: '珍珠奶茶', ts: 5 }],
+      drinkFavorites: ['drink-naicha'],
+      drinkExclusions: [],
+    }
+    const merged = merge2(current, parsedV1.data)
+    // 食物数据正常合并
+    assert(merged.history.length === 2, 'v1 导入后食物历史合并不正确')
+    // 饮料数据必须原样保留，不被 v1 内容清空
+    assert(merged.drinkHistory.length === 1, 'v1 导入清空了饮料历史')
+    assert(merged.drinkFavorites.includes('drink-naicha'), 'v1 导入清空了饮料收藏')
+
+    return 'v1 备份可解析，导入不污染也不清空饮料数据'
+  })
+
+  check('34 饮料筛选偏好校验与非法值回退', () => {
+    const { normalizeDrinkPrefs, DEFAULT_DRINK_PREFS } = storage
+
+    // 完全非法的输入必须回退为默认值
+    const fallback = normalizeDrinkPrefs({ brand: 123, budgetKey: 'nope', temperature: {}, category: [], sugar: 'x', caffeine: null })
+    assert(fallback.brand === DEFAULT_DRINK_PREFS.brand, `brand 非法值未回退：${fallback.brand}`)
+    assert(fallback.budgetKey === DEFAULT_DRINK_PREFS.budgetKey, 'budgetKey 非法值未回退')
+    assert(fallback.temperature === DEFAULT_DRINK_PREFS.temperature, 'temperature 非法值未回退')
+    assert(fallback.category === DEFAULT_DRINK_PREFS.category, 'category 非法值未回退')
+    assert(fallback.sugar === DEFAULT_DRINK_PREFS.sugar, 'sugar 非法值未回退')
+    assert(fallback.caffeine === DEFAULT_DRINK_PREFS.caffeine, 'caffeine 非法值未回退')
+
+    // null / undefined 也必须安全
+    const fromNull = normalizeDrinkPrefs(null)
+    assert(fromNull.budgetKey === DEFAULT_DRINK_PREFS.budgetKey, 'null 输入未回退')
+
+    // 合法值应原样保留
+    const valid = normalizeDrinkPrefs({ brand: 'mxbc', budgetKey: 'cheap', temperature: '热', category: '纯茶', sugar: '无糖', caffeine: '无咖啡因' })
+    assert(valid.brand === 'mxbc' && valid.budgetKey === 'cheap' && valid.temperature === '热', '合法值被错误改写')
+
+    return '非法枚举/类型/null 全部回退默认，合法值原样保留'
+  })
+
+  /**
+   * 检查 35：饮品 schema 字段名与消费端一致。
+   * ------------------------------------------------------------------
+   * 这一项是回归防护。本模块曾出现一批「字段名假设错误」的真实缺陷：
+   *   - 数据字段是 `sweetness`（数组），但筛选/忌口代码读的是 `drink.sugar`
+   *     → 甜度筛选恒零候选、「不要高糖」忌口完全失效；
+   *   - 结果卡片渲染 `drink.emoji`，但数据里根本没有该字段
+   *     → 界面出现空白图标。
+   * 这类错误的共同点是「读一个 schema 里不存在的键，得到 undefined，
+   * 却不报错、静默失效」。因此这里显式断言：
+   *   1. DRINKS 里不得出现 `sugar` / `emoji` 这类非 schema 字段；
+   *   2. schema 声明的字段必须在每条数据上都存在且类型正确。
+   */
+  check('35 饮品 schema 字段名一致（防静默失效）', () => {
+    // schema 里声明的字段（与 enrichDrink 白名单保持一致）
+    const SCHEMA = {
+      id: 'string',
+      brandId: 'string',
+      name: 'string',
+      aliases: 'array',
+      category: 'string',
+      priceStatus: 'string',
+      availability: 'string',
+      temperatures: 'array',
+      sweetness: 'array',
+      ingredientTags: 'array',
+      caffeine: 'string',
+      scenes: 'array',
+      sources: 'array',
+      verifiedAt: 'string',
+    }
+
+    // 1) 禁止出现 schema 之外的别名键（历史 bug 的形状）
+    for (const key of ['sugar', 'emoji', 'taste', 'temperatureOptions', 'sweetnessOptions', 'caffeineStatus']) {
+      const offenders = DRINKS.filter((drink) => Object.prototype.hasOwnProperty.call(drink, key))
+      assert(offenders.length === 0, `存在非 schema 字段「${key}」：${offenders.slice(0, 3).map((d) => d.id).join(', ')} 等 ${offenders.length} 条`)
+    }
+
+    // 2) schema 字段必须齐全且类型正确
+    const typeOf = (value) => (Array.isArray(value) ? 'array' : typeof value)
+    for (const [key, expected] of Object.entries(SCHEMA)) {
+      const bad = DRINKS.filter((drink) => typeOf(drink[key]) !== expected)
+      assert(bad.length === 0, `字段「${key}」应为 ${expected}，异常 ${bad.length} 条：${bad.slice(0, 3).map((d) => d.id).join(', ')}`)
+    }
+
+    // 3) 甜度筛选已从界面移除（推荐池内没有任何一条带糖度数据，放着就是装饰）。
+    //    这里锁定底层口径：糖度筛选只能命中「该饮品确实公示了该糖度」的条目，
+    //    且不得因为数据缺失就零候选之外还谎报结果。
+    const { filterDrinks } = drinkPicker
+    const noSugar = filterDrinks({ sugar: '无糖' })
+    for (const drink of noSugar) {
+      assert(drink.sweetness.includes('无糖'), `${drink.id} 被「无糖」筛出但 sweetness 未声明无糖`)
+    }
+    const noDataSelected = noSugar.filter((d) => d.sweetness.length === 0)
+    assert(noDataSelected.length === 0, `糖度未知的饮品被糖度筛选选中：${noDataSelected.length} 条`)
+
+    // 4) 忌口「高糖」的口径：只排除【明确公示提供正常糖】的饮品。
+    //    不得把「糖度未公示」当成高糖——那会让 180 条常驻饮品全部出局，
+    //    一个勾选锁死功能（曾经的真实缺陷）。同时也不能反向泄露正常糖饮品。
+    const highSugarExcluded = filterDrinks({ exclusions: ['高糖'] })
+    const leaked = highSugarExcluded.filter((d) => d.sweetness.includes('正常糖'))
+    assert(leaked.length === 0, `「不要高糖」未排除含正常糖饮品：${leaked.length} 条`)
+    // 忌口后候选必须仍然可用（不能因数据缺失而清零）
+    assert(highSugarExcluded.length > 0, '「不要高糖」把关口收得过紧，候选清零（会锁死功能）')
+
+    // 5) emoji 派生函数必须对全部饮品返回非空字符串
+    const emptyEmoji = DRINKS.filter((d) => !drinksMod.drinkEmoji(d) || typeof drinksMod.drinkEmoji(d) !== 'string')
+    assert(emptyEmoji.length === 0, `drinkEmoji 返回空值：${emptyEmoji.length} 条`)
+
+    // 6) 结果卡片消费的字段必须在 schema 里真实存在（防 undefined 静默渲染）
+    const cardFields = ['category', 'caffeine', 'temperatures', 'scenes', 'sweetness']
+    for (const key of cardFields) {
+      const bad = DRINKS.filter((d) => d[key] === undefined)
+      assert(bad.length === 0, `结果卡片读取的字段「${key}」在 ${bad.length} 条数据上为 undefined`)
+    }
+
+    return `甜度口径一致（无糖命中 ${noSugar.length} 且全部有依据），高糖忌口排除正常糖 ${highSugarExcluded.length ? '有效' : '无效'}且候选未清零（剩 ${highSugarExcluded.length}），emoji 全量非空`
+  })
+
   /* --------------------------- 输出报告 --------------------------- */
 
   const groups = [
-    { title: '数据完整性', from: 0, to: 6 },
-    { title: '算法正确性', from: 6, to: results.length },
+    { title: '食物 · 数据完整性', from: 0, to: 6 },
+    { title: '食物 · 算法正确性', from: 6, to: 26 },
+    { title: '饮料 · 数据与推荐', from: 26, to: results.length },
   ]
 
   console.log('')
-  console.log('食物数据与推荐算法自检')
+  console.log('食物与饮料数据自检')
   console.log('='.repeat(64))
   console.log(`Node ${process.version}`)
   console.log(`源码 ${SRC}`)

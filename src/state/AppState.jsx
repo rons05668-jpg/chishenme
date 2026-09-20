@@ -2,9 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   MAX_HISTORY,
   buildBackup,
+  createDrinkHistoryRecord,
   createHistoryRecord,
   downloadBackup,
   loadDislikes,
+  loadDrinkDislikes,
+  loadDrinkExclusions,
+  loadDrinkFavorites,
+  loadDrinkHistory,
+  loadDrinkPrefs,
+  loadDrinkStats,
   loadExclusions,
   loadFavorites,
   loadFilterPrefs,
@@ -14,6 +21,12 @@ import {
   onWriteError,
   parseBackup,
   saveDislikes,
+  saveDrinkDislikes,
+  saveDrinkExclusions,
+  saveDrinkFavorites,
+  saveDrinkHistory,
+  saveDrinkPrefs,
+  saveDrinkStats,
   saveExclusions,
   saveFavorites,
   saveFilterPrefs,
@@ -21,6 +34,7 @@ import {
   saveStats,
 } from '../lib/storage'
 import { DEFAULT_FILTERS, NORMAL_FILTER_KEYS, normalizeFilters } from '../lib/filters'
+import { DRINK_DEFAULT_FILTERS, DRINK_NORMAL_FILTER_KEYS } from '../lib/drinkPicker'
 
 const AppStateContext = createContext(null)
 
@@ -35,6 +49,19 @@ export function AppStateProvider({ children }) {
   const [exclusions, setExclusions] = useState(() => loadExclusions())
   // 筛选偏好提升为全局：随机页与转盘页共享同一份条件，且刷新后恢复
   const [filters, setFilters] = useState(() => loadFilterPrefs())
+
+  /*
+   * 饮料模块的独立状态。
+   * 与食物状态完全隔离：使用独立的存储键与 `drink-` 前缀 id，
+   * 因此食物与饮品的收藏/历史永不互相污染，旧数据也无需迁移。
+   */
+  const [drinkHistory, setDrinkHistory] = useState(() => loadDrinkHistory())
+  const [drinkFavorites, setDrinkFavorites] = useState(() => loadDrinkFavorites())
+  const [drinkDislikes, setDrinkDislikes] = useState(() => loadDrinkDislikes())
+  const [drinkStats, setDrinkStats] = useState(() => loadDrinkStats())
+  const [drinkExclusions, setDrinkExclusions] = useState(() => loadDrinkExclusions())
+  const [drinkFilters, setDrinkFilters] = useState(() => loadDrinkPrefs())
+
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
 
@@ -63,6 +90,26 @@ export function AppStateProvider({ children }) {
   useEffect(() => {
     saveFilterPrefs(filters)
   }, [filters])
+
+  // 饮料状态的持久化：与食物同样是语句块包裹，不把 save 的 boolean 返回值透出。
+  useEffect(() => {
+    saveDrinkHistory(drinkHistory)
+  }, [drinkHistory])
+  useEffect(() => {
+    saveDrinkFavorites(drinkFavorites)
+  }, [drinkFavorites])
+  useEffect(() => {
+    saveDrinkDislikes(drinkDislikes)
+  }, [drinkDislikes])
+  useEffect(() => {
+    saveDrinkStats(drinkStats)
+  }, [drinkStats])
+  useEffect(() => {
+    saveDrinkExclusions(drinkExclusions)
+  }, [drinkExclusions])
+  useEffect(() => {
+    saveDrinkPrefs(drinkFilters)
+  }, [drinkFilters])
 
   useEffect(() => () => clearTimeout(toastTimer.current), [])
 
@@ -119,34 +166,85 @@ export function AppStateProvider({ children }) {
     })
   }, [])
 
+  /* -------------------------- 饮料筛选偏好 -------------------------- */
+
+  /** 合并式更新：只覆盖传入字段，其余保持当前值 */
+  const updateDrinkFilters = useCallback((patch) => {
+    setDrinkFilters((prev) => ({ ...prev, ...patch }))
+  }, [])
+
+  /**
+   * 重置饮料普通筛选条件。
+   * 与食物一致：忌口（drinkExclusions）是独立 state，不在此对象内，
+   * 因此本方法只清预算/温度/类型/场景/甜度/咖啡因，天然不影响忌口。
+   */
+  const resetDrinkFilters = useCallback(() => {
+    setDrinkFilters((prev) => {
+      const next = { ...prev }
+      DRINK_NORMAL_FILTER_KEYS.forEach((key) => {
+        // 注意：resetDrinkFilterPatch(key) 返回的是「补丁对象」{ [key]: value }，
+        // 用于合并更新；这里要的是单字段的值本身，直接取 DRINK_DEFAULT_FILTERS。
+        // 曾误写成 next[key] = resetDrinkFilterPatch(key)，导致 filters.temperature
+        // 变成对象、渲染时抛 React error #31。
+        next[key] = DRINK_DEFAULT_FILTERS[key]
+      })
+      return next
+    })
+  }, [])
+
   /* ---------------------------- 备份 / 恢复 ---------------------------- */
 
   /** 导出备份文件；只返回结果对象，是否提示由调用方决定 */
   const exportBackup = useCallback(() => {
-    const payload = buildBackup({ history, favorites, exclusions, filterPrefs: filters, stats })
+    const payload = buildBackup({
+      history,
+      favorites,
+      exclusions,
+      filterPrefs: filters,
+      stats,
+      drinkHistory,
+      drinkFavorites,
+      drinkExclusions,
+      drinkPrefs: drinkFilters,
+      drinkStats,
+    })
     const ok = downloadBackup(payload)
     return ok
       ? { ok: true, message: '备份文件已开始下载' }
       : { ok: false, message: '备份下载失败，请检查浏览器权限' }
-  }, [history, favorites, exclusions, filters, stats])
+  }, [history, favorites, exclusions, filters, stats, drinkHistory, drinkFavorites, drinkExclusions, drinkFilters, drinkStats])
 
   /**
    * 导入备份：解析失败直接返回原因；成功则与现有数据做并集合并，
    * 绝不删除现有有效数据（mergeImported 本身即为并集语义）。
+   * 食物与饮料各自独立合并，互不覆盖。
    */
   const importBackup = useCallback(
     (text) => {
       const parsed = parseBackup(text)
       if (!parsed.ok) return { ok: false, message: parsed.reason }
 
-      const merged = mergeImported({ history, favorites, exclusions }, parsed.data)
+      const merged = mergeImported(
+        {
+          history,
+          favorites,
+          exclusions,
+          drinkHistory,
+          drinkFavorites,
+          drinkExclusions,
+        },
+        parsed.data
+      )
       setHistory(merged.history)
       setFavorites(merged.favorites)
       setExclusions(merged.exclusions)
+      if (merged.drinkHistory) setDrinkHistory(merged.drinkHistory)
+      if (merged.drinkFavorites) setDrinkFavorites(merged.drinkFavorites)
+      if (merged.drinkExclusions) setDrinkExclusions(merged.drinkExclusions)
 
       return { ok: true, added: merged.added, warnings: parsed.warnings }
     },
-    [history, favorites, exclusions]
+    [history, favorites, exclusions, drinkHistory, drinkFavorites, drinkExclusions]
   )
 
   /* ------------------------------ 记录 ------------------------------ */
@@ -194,6 +292,53 @@ export function AppStateProvider({ children }) {
 
   const resetDislikes = useCallback(() => setDislikes([]), [])
 
+  /* ---------------------------- 饮料记录 ---------------------------- */
+
+  /**
+   * 记录「就喝这个」。
+   * 使用独立的 drinkStats，「已决定吃饭顿数」的含义不受影响。
+   */
+  const recordDrink = useCallback((drink) => {
+    if (!drink) return
+    setDrinkHistory((prev) => [createDrinkHistoryRecord(drink), ...prev].slice(0, MAX_HISTORY))
+    setDrinkStats((prev) => ({
+      totalDecided: (prev.totalDecided || 0) + 1,
+      firstUsedAt: prev.firstUsedAt || Date.now(),
+    }))
+    // 喝过之后把它从「本次不喜欢」里移除，避免长期压制
+    setDrinkDislikes((prev) => prev.filter((id) => id !== drink.id))
+  }, [])
+
+  const removeDrinkHistoryRecord = useCallback((uid) => {
+    setDrinkHistory((prev) => prev.filter((item) => item.uid !== uid))
+  }, [])
+
+  const clearDrinkHistory = useCallback(() => setDrinkHistory([]), [])
+
+  /** 收藏 / 取消收藏饮品，返回本次是否为「新增」 */
+  const toggleDrinkFavorite = useCallback(
+    (drinkId) => {
+      const added = !drinkFavorites.includes(drinkId)
+      setDrinkFavorites((prev) =>
+        prev.includes(drinkId) ? prev.filter((id) => id !== drinkId) : [...prev, drinkId]
+      )
+      return added
+    },
+    [drinkFavorites]
+  )
+
+  const isDrinkFavorite = useCallback(
+    (drinkId) => drinkFavorites.includes(drinkId),
+    [drinkFavorites]
+  )
+
+  /** 「这个不想喝」：本次会话内降低推荐概率 */
+  const dislikeDrink = useCallback((drinkId) => {
+    setDrinkDislikes((prev) => (prev.includes(drinkId) ? prev : [...prev, drinkId]))
+  }, [])
+
+  const resetDrinkDislikes = useCallback(() => setDrinkDislikes([]), [])
+
   const value = useMemo(
     () => ({
       exclusions,
@@ -217,6 +362,23 @@ export function AppStateProvider({ children }) {
       isFavorite,
       dislikeFood,
       resetDislikes,
+      // 饮料模块
+      drinkHistory,
+      drinkFavorites,
+      drinkDislikes,
+      drinkStats,
+      drinkExclusions,
+      setDrinkExclusions,
+      drinkFilters,
+      updateDrinkFilters,
+      resetDrinkFilters,
+      recordDrink,
+      removeDrinkHistoryRecord,
+      clearDrinkHistory,
+      toggleDrinkFavorite,
+      isDrinkFavorite,
+      dislikeDrink,
+      resetDrinkDislikes,
     }),
     [
       exclusions,
@@ -239,6 +401,21 @@ export function AppStateProvider({ children }) {
       isFavorite,
       dislikeFood,
       resetDislikes,
+      drinkHistory,
+      drinkFavorites,
+      drinkDislikes,
+      drinkStats,
+      drinkExclusions,
+      drinkFilters,
+      updateDrinkFilters,
+      resetDrinkFilters,
+      recordDrink,
+      removeDrinkHistoryRecord,
+      clearDrinkHistory,
+      toggleDrinkFavorite,
+      isDrinkFavorite,
+      dislikeDrink,
+      resetDrinkDislikes,
     ]
   )
 

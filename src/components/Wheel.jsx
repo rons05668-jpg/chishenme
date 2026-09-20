@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { shortName } from '../data/foods'
 import { weightOf } from '../lib/picker'
-
 /** 扇区配色：柔和的暖色循环，保证文字始终清晰可读 */
 const SEGMENT_COLORS = [
   '#FFE6D2',
@@ -31,9 +30,12 @@ const polar = (radius, angleDeg) => {
 
 /**
  * 幸运转盘
- * items     候选食物列表（2–10 个；零和单候选由页面处理）
- * context   { history, favorites, dislikes }，用于加权决定最终结果
- * onResult  旋转结束后回调，参数为命中的食物
+ * items       候选列表（2–10 个；零和单候选由页面处理）
+ * context     { history, favorites, dislikes }，用于加权决定最终结果
+ * onResult    旋转结束后回调，参数为命中的条目
+ * shortNameOf 扇区短标签取值的可选覆盖（饮料页传入饮料版短名函数）
+ * weightOfFn  权重函数的可选覆盖（默认用食物的 weightOf）
+ * ariaLabel   无障碍标签，默认「吃什么转盘」
  */
 export default function Wheel({
   items,
@@ -42,6 +44,9 @@ export default function Wheel({
   spinLabel = '转一下',
   spinSignal = 0,
   onSpinChange,
+  shortNameOf = shortName,
+  weightOfFn = weightOf,
+  ariaLabel = '吃什么转盘',
 }) {
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
@@ -91,7 +96,7 @@ export default function Wheel({
 
   /** 按权重决定落点（最近吃过 / 不喜欢的食物概率更低） */
   const pickWinnerIndex = useCallback(() => {
-    const weights = items.map((food) => weightOf(food, context))
+    const weights = items.map((food) => weightOfFn(food, context))
     const total = weights.reduce((sum, weight) => sum + weight, 0)
     if (total <= 0) return Math.floor(Math.random() * count)
     let ticket = Math.random() * total
@@ -100,7 +105,7 @@ export default function Wheel({
       if (ticket <= 0) return i
     }
     return count - 1
-  }, [items, context, count])
+  }, [items, context, count, weightOfFn])
 
   const finalize = useCallback(() => {
     const food = pendingRef.current
@@ -166,7 +171,7 @@ export default function Wheel({
           style={{ transform: `rotate(${rotation}deg)` }}
           onTransitionEnd={handleTransitionEnd}
           role="img"
-          aria-label="吃什么转盘"
+          aria-label={ariaLabel}
         >
           <circle cx={CENTER} cy={CENTER} r={RADIUS + 2} fill="#fff" />
           {segments.map((segment) => (
@@ -198,7 +203,7 @@ export default function Wheel({
                   dominantBaseline="middle"
                   className="wheel-seg-label"
                 >
-                  {shortName(segment.food)}
+                  {shortNameOf(segment.food)}
                 </text>
               </g>
             </g>

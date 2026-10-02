@@ -161,13 +161,16 @@ function usePersistedModule(config) {
    * 收藏 / 取消收藏，返回本次是否为「新增」。
    * 返回值基于 ref 镜像计算，不能依赖 setState 更新函数内部的副作用
    * （React 不保证它同步执行）；回调本身不依赖 favorites 数组，引用永久稳定。
+   * 同一渲染周期内连调时：先乐观同步更新 ref 镜像，再 setState，
+   * 保证第二次调用的 added 基于最新值计算，不会撒谎。
    */
   const toggleFavorite = useCallback(
     (itemId) => {
       const added = !ref.current.favorites.includes(itemId)
-      setFavorites((prev) =>
-        prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
-      )
+      ref.current.favorites = added
+        ? [...ref.current.favorites, itemId]
+        : ref.current.favorites.filter((id) => id !== itemId)
+      setFavorites(ref.current.favorites)
       return added
     },
     [setFavorites]
@@ -399,9 +402,10 @@ export function AppStateProvider({ children }) {
       food.setExclusions(merged.exclusions)
       if (parsed.present.stats) food.setStats(merged.stats)
       if (parsed.present.filterPrefs) food.setPrefs(merged.filterPrefs)
-      if (merged.drinkHistory) drink.setHistory(merged.drinkHistory)
-      if (merged.drinkFavorites) drink.setFavorites(merged.drinkFavorites)
-      if (merged.drinkExclusions) drink.setExclusions(merged.drinkExclusions)
+      // mergeImported 恒返回数组（可能为空），与食物侧统一为无条件 set
+      drink.setHistory(merged.drinkHistory)
+      drink.setFavorites(merged.drinkFavorites)
+      drink.setExclusions(merged.drinkExclusions)
       if (parsed.present.drinkStats) drink.setStats(merged.drinkStats)
       if (parsed.present.drinkPrefs) drink.setPrefs(merged.drinkPrefs)
 

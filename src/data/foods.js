@@ -17,6 +17,7 @@
  */
 
 import { EXTRA_FOODS, enrichFood } from './food-metadata.js'
+import { NYC_PRICE_USD } from './nyc-prices.js'
 
 export const CATEGORIES = ['米饭', '粉面', '包饺饼类', '火锅锅物', '家常菜', '烧烤', '小吃点心', '西式主菜', '快餐简餐', '粥汤', '甜品烘焙']
 export const CUISINES = ['家常', '川渝', '粤式', '江浙', '东北', '西北', '华北', '湘式', '云贵', '日韩', '东南亚', '西式']
@@ -1113,8 +1114,15 @@ export const SHORT_NAMES = {
 
 export const shortName = (food) => SHORT_NAMES[food.id] || food.shortName || [...food.name].slice(0, 4).join('')
 
-/** 价格区间展示文案，例如 ¥15–25 */
-export const priceLabel = (food) => `¥${food.price[0]}–${food.price[1]}`
+/**
+ * 价格区间展示文案。
+ * 纽约·Parsons 条目有人均美元价（见 nyc-prices.js 的 NYC_PRICE_USD 映射），
+ * 用 $ 展示避免误导在美用户；其余条目用 ¥。
+ */
+export const priceLabel = (food) => {
+  const usd = food.region === 'parsons-nyc' ? NYC_PRICE_USD[food.id] : undefined
+  return Array.isArray(usd) ? `$${usd[0]}–$${usd[1]}` : `¥${food.price[0]}–${food.price[1]}`
+}
 
 /** 该食物是否命中某个预算档位（用价格区间与档位区间求交集，避免一刀切） */
 export const matchBudget = (food, budget) => {

@@ -280,7 +280,8 @@ const DEFAULT_STATS = { totalDecided: 0, firstUsedAt: null }
 export function normalizeStats(raw) {
   if (!isPlainObject(raw)) return { ...DEFAULT_STATS }
   return {
-    totalDecided: isFiniteNumber(raw.totalDecided) && raw.totalDecided >= 0 ? Math.floor(raw.totalDecided) : 0,
+    // totalDecided 封顶 1e6：脏数据里的 1e30 会导致首页显示 "1e+30"
+    totalDecided: isFiniteNumber(raw.totalDecided) && raw.totalDecided >= 0 ? Math.min(Math.floor(raw.totalDecided), 1e6) : 0,
     firstUsedAt: isFiniteNumber(raw.firstUsedAt) && raw.firstUsedAt > 0 ? raw.firstUsedAt : null,
   }
 }
@@ -466,7 +467,7 @@ const DEFAULT_DRINK_STATS = { totalDecided: 0, firstUsedAt: null }
 export function normalizeDrinkStats(raw) {
   if (!isPlainObject(raw)) return { ...DEFAULT_DRINK_STATS }
   return {
-    totalDecided: isFiniteNumber(raw.totalDecided) && raw.totalDecided >= 0 ? Math.floor(raw.totalDecided) : 0,
+    totalDecided: isFiniteNumber(raw.totalDecided) && raw.totalDecided >= 0 ? Math.min(Math.floor(raw.totalDecided), 1e6) : 0,
     firstUsedAt: isFiniteNumber(raw.firstUsedAt) && raw.firstUsedAt > 0 ? raw.firstUsedAt : null,
   }
 }
@@ -652,6 +653,10 @@ export function parseBackup(text) {
   if (data.drinkHistory !== undefined && !Array.isArray(data.drinkHistory)) warnings.push('饮料历史记录字段类型不正确，已跳过')
   if (data.drinkFavorites !== undefined && !Array.isArray(data.drinkFavorites)) warnings.push('饮料收藏字段类型不正确，已跳过')
   if (data.drinkExclusions !== undefined && !Array.isArray(data.drinkExclusions)) warnings.push('饮料忌口字段类型不正确，已跳过')
+  if (data.filterPrefs !== undefined && !isPlainObject(data.filterPrefs)) warnings.push('筛选偏好字段类型不正确，已跳过（保留当前偏好）')
+  if (data.stats !== undefined && !isPlainObject(data.stats)) warnings.push('统计字段类型不正确，已跳过（保留当前统计）')
+  if (data.drinkPrefs !== undefined && !isPlainObject(data.drinkPrefs)) warnings.push('饮料筛选偏好字段类型不正确，已跳过（保留当前偏好）')
+  if (data.drinkStats !== undefined && !isPlainObject(data.drinkStats)) warnings.push('饮料统计字段类型不正确，已跳过（保留当前统计）')
 
   const rawHistory = Array.isArray(data.history) ? data.history : []
   const rawFavorites = Array.isArray(data.favorites) ? data.favorites : []
@@ -695,11 +700,14 @@ export function parseBackup(text) {
     warnings,
     // 原始备份是否携带这些字段：缺失时导入不碰用户当前值，
     // 避免把筛选偏好/统计重置为默认值（老备份没有这些字段）。
+    // 注意用 isPlainObject 而不是 !== undefined 判定：字段类型错误
+    // （如 filterPrefs 是字符串）时视为缺失，不覆盖用户当前值，
+    // 否则 normalize 会洗成全默认值并静默清掉用户偏好。
     present: {
-      filterPrefs: data.filterPrefs !== undefined,
-      stats: data.stats !== undefined,
-      drinkPrefs: data.drinkPrefs !== undefined,
-      drinkStats: data.drinkStats !== undefined,
+      filterPrefs: isPlainObject(data.filterPrefs),
+      stats: isPlainObject(data.stats),
+      drinkPrefs: isPlainObject(data.drinkPrefs),
+      drinkStats: isPlainObject(data.drinkStats),
     },
     data: {
       history,

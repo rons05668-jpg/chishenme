@@ -14,8 +14,12 @@
  */
 
 import { DRINKS, DRINK_BUDGETS, matchDrinkBudget } from '../data/drinks'
+import { DRINK_DEFAULT_FILTERS, DRINK_NORMAL_FILTER_KEYS } from '../data/drinks-meta'
 import { getBrandById } from '../data/brands'
 import { daysSinceLastEaten, shuffle } from './picker'
+
+/* 默认筛选值 / 普通筛选项：定义在 drinks-meta（小模块），这里 re-export 保持老路径可用 */
+export { DRINK_DEFAULT_FILTERS, DRINK_NORMAL_FILTER_KEYS } from '../data/drinks-meta'
 /** 含奶饮品的名称特征（拿铁 / 卡布奇诺 / 摩卡等咖啡类） */
 const MILKY_NAME_PATTERN = /拿铁|卡布奇诺|摩卡/
 
@@ -35,7 +39,7 @@ function containsDairy(drink) {
 
 /** 该饮料是否只提供冰的（不适合要「不要冰」的人） */
 const onlyServedIced = (drink) =>
-  drink.temperatures.length === 1 && drink.temperatures[0] === '冰'
+  (drink.temperatures || []).length === 1 && drink.temperatures[0] === '冰'
 
 /**
  * 忌口标签 -> 判定函数，一条饮料命中任一判定即被排除。
@@ -53,7 +57,7 @@ const EXCLUSION_RULES = {
   咖啡因: (drink) => drink.caffeine !== '无咖啡因',
   乳制品: (drink) => containsDairy(drink),
   冰: (drink) => onlyServedIced(drink),
-  高糖: (drink) => drink.sweetness.includes('正常糖'),
+  高糖: (drink) => (drink.sweetness || []).includes('正常糖'),
 }
 
 /** 各忌口项的数据局限性说明，用于界面诚实告知（不得静默） */
@@ -91,12 +95,12 @@ export function filterDrinks(filters = {}) {
     if (!isRecommendable(drink)) return false
     if (!matchDrinkBudget(drink, budget)) return false
     if (brand && brand !== '随机' && drink.brandId !== brand) return false
-    if (temperature && temperature !== '随机' && !drink.temperatures.includes(temperature)) return false
+    if (temperature && temperature !== '随机' && !(drink.temperatures || []).includes(temperature)) return false
     if (category && category !== '随机' && drink.category !== category) return false
-    if (scene && scene !== '随机' && !drink.scenes.includes(scene)) return false
+    if (scene && scene !== '随机' && !(drink.scenes || []).includes(scene)) return false
     // 糖度：sweetness 是「该饮品官方公示提供的糖度选项」数组。
     // 用户选「无糖」= 要求该饮品能做成无糖，而不是声称整杯无糖（需求明确禁止后者表述）。
-    if (sugar && sugar !== '随机' && !drink.sweetness.includes(sugar)) return false
+    if (sugar && sugar !== '随机' && !(drink.sweetness || []).includes(sugar)) return false
     if (caffeine && caffeine !== '随机' && drink.caffeine !== caffeine) return false
     return true
   })
@@ -233,7 +237,9 @@ export function buildDrinkWheelPool(filters = {}, context = {}, maxCount = 10) {
  * 按品牌分层的不放回抽样，用于转盘候选。
  * 与 pickDrinkByBrand 保持同一套「品牌优先」规则，确保转盘扇区构成与
  * 随机推荐的落点逻辑一致——否则转盘上大目录品牌的扇区会明显更多。
- * 做法：轮转遍历各品牌（每个品牌内部先打乱），依次取一条，直到取满。
+ * 做法：轮转遍历各品牌，依次做一次加权抽取（不放回），直到取满。
+ * 品牌内部是真加权随机而非按权重取头：相同筛选+历史下每次转盘的扇区
+ * 组合都不同，转盘才有随机性。
  */
 export function sampleDrinksByBrand(pool, count, context = {}) {
   if (pool.length <= count) return shuffle(pool)
@@ -245,46 +251,26 @@ export function sampleDrinksByBrand(pool, count, context = {}) {
     groups.get(key).push(drink)
   }
 
-  // 品牌内按权重降序（等价于加权后的优先次序），品牌之间轮转取样
-  const queues = Array.from(groups.values()).map((list) =>
-    buildDrinkWeights(list, context)
-      .sort((a, b) => b.weight - a.weight)
-      .map((entry) => entry.food)
-  )
+  // 品牌内保留加权不放回抽样的权重队列，品牌之间轮转取样
+  const queues = Array.from(groups.values()).map((list) => buildDrinkWeights(list, context))
 
   const picked = []
   let cursor = 0
   while (picked.length < count && queues.some((queue) => queue.length)) {
     const queue = queues[cursor % queues.length]
-    if (queue.length) picked.push(queue.shift())
+    if (queue.length) {
+      const chosen = weightedPickDrink(queue)
+      picked.push(chosen)
+      const index = queue.findIndex((entry) => entry.food.id === chosen.id)
+      queue.splice(index, 1)
+    }
     cursor += 1
   }
   return shuffle(picked)
 }
 
 /* --------------------------- 筛选状态工具 --------------------------- */
-
-/** 默认筛选值 */
-export const DRINK_DEFAULT_FILTERS = {
-  brand: '随机',
-  budgetKey: 'any',
-  temperature: '随机',
-  category: '随机',
-  scene: '随机',
-  sugar: '随机',
-  caffeine: '随机',
-}
-
-/** 除忌口外的「普通筛选」字段 */
-export const DRINK_NORMAL_FILTER_KEYS = [
-  'brand',
-  'budgetKey',
-  'temperature',
-  'category',
-  'scene',
-  'sugar',
-  'caffeine',
-]
+/* 默认筛选值 / 普通筛选项见文件顶部 re-export（定义在 drinks-meta） */
 
 /** 各字段对应的中文名，用于摘要与放宽建议文案 */
 const DRINK_FIELD_LABELS = {
@@ -298,7 +284,7 @@ const DRINK_FIELD_LABELS = {
 }
 
 /** 把 UI 上的筛选状态转换成推荐算法需要的结构 */
-export function toDrinkPickerFilters(filters) {
+export function toDrinkPickerFilters(filters = {}) {
   return {
     budget: DRINK_BUDGETS.find((item) => item.key === filters.budgetKey) || DRINK_BUDGETS[0],
     brand: filters.brand,

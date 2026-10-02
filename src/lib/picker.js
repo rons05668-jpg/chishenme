@@ -13,7 +13,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 /** 条件筛选；'随机' 或 'any' 视为不限制 */
 export function respectsExclusions(food, exclusions = []) {
-  return !exclusions.some((tag) => food.exclusions.includes(tag) || food.uncertainExclusions.includes(tag))
+  const known = food.exclusions || []
+  const uncertain = food.uncertainExclusions || []
+  return !exclusions.some((tag) => known.includes(tag) || uncertain.includes(tag))
 }
 
 export function filterFoods(filters = {}) {
@@ -29,21 +31,30 @@ export function filterFoods(filters = {}) {
     } else if (region && region !== '随机' && food.region !== region) {
       return false
     }
-    if (cuisine && cuisine !== '随机' && !food.cuisines.includes(cuisine)) return false
-    if (meal && meal !== '随机' && !food.meals.includes(meal)) return false
+    if (cuisine && cuisine !== '随机' && !(food.cuisines || []).includes(cuisine)) return false
+    if (meal && meal !== '随机' && !(food.meals || []).includes(meal)) return false
     if (!matchBudget(food, budget)) return false
     if (taste && taste !== '随机' && food.taste !== taste) return false
     if (category && category !== '随机' && food.category !== category) return false
-    if (scene && scene !== '随机' && !food.scenes.includes(scene)) return false
+    if (scene && scene !== '随机' && !(food.scenes || []).includes(scene)) return false
     return true
   })
 }
 
-/** 距离上次吃该食物过去了几天（从未吃过返回 Infinity） */
-export function daysSinceLastEaten(foodId, history) {
-  const last = history.find((item) => item.id === foodId)
-  if (!last) return Infinity
-  const diff = Date.now() - last.ts
+/**
+ * 距离上次吃该食物过去了几天（从未吃过返回 Infinity）。
+ * 取 history 中该 id 的最大 ts，不依赖数组的顺序：
+ * 任何地方 append / unshift 都不影响结果。
+ */
+export function daysSinceLastEaten(foodId, history = []) {
+  let latest = -Infinity
+  for (const item of history) {
+    if (item && item.id === foodId && typeof item.ts === 'number' && item.ts > latest) {
+      latest = item.ts
+    }
+  }
+  if (latest === -Infinity) return Infinity
+  const diff = Date.now() - latest
   return Math.max(0, Math.floor(diff / DAY_MS))
 }
 

@@ -12,6 +12,12 @@
 
 import { BUDGETS, CATEGORIES, CUISINES, EXCLUSIONS, MEALS, REGIONS, SCENES, TASTES, getFoodById } from '../data/foods'
 import { BRANDS } from '../data/brands'
+/*
+ * 注意：这里只从 drinks-meta（轻量枚举模块）导入，绝不直接导入 data/drinks。
+ * 209KB 的 DRINKS 大表只在饮品页 chunk 里加载；首屏初始化只需要枚举做校验。
+ * getDrinkById 在首屏恒返回 null（大表只在饮品页 chunk 加载），
+ * 归一化函数对此有静态兜底，行为降级但不抛错。
+ */
 import {
   CAFFEINE_LEVELS,
   DRINK_BUDGETS,
@@ -22,7 +28,7 @@ import {
   TEMPERATURES,
   drinkEmoji,
   getDrinkById,
-} from '../data/drinks'
+} from '../data/drinks-meta'
 
 const PREFIX = 'tqsc:v1:'
 
@@ -212,10 +218,21 @@ export function saveHistory(list) {
   return writeLocal(KEYS.history, list.filter(isValidHistoryRecord).slice(0, MAX_HISTORY))
 }
 
+/**
+ * 10 位 base36 随机段（约 52 bit 熵）。
+ * 注意 Math.random().toString(36) 的小数部分长度不固定，
+ * 直接 slice 可能不足 10 位，这里补零保证固定长度。
+ * 同毫秒内连点两次也不会碰撞——mergeImported 按 uid 去重，
+ * 碰撞会静默丢一条记录。
+ */
+function randomSuffix() {
+  return (Math.random().toString(36).slice(2) + '0000000000').slice(0, 10)
+}
+
 export function createHistoryRecord(food) {
   const now = new Date()
   return {
-    uid: `${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+    uid: `${now.getTime()}-${randomSuffix()}`,
     id: food.id,
     name: food.name,
     emoji: food.emoji,
@@ -255,14 +272,22 @@ export function saveDislikes(list) {
 
 const DEFAULT_STATS = { totalDecided: 0, firstUsedAt: null }
 
-/** 统计校验：字段类型不对就回退到默认值，避免出现 NaN 之类的展示 */
-export function loadStats() {
-  const raw = readLocal(KEYS.stats, DEFAULT_STATS)
+/**
+ * 统计归一化：字段类型不对就回退到默认值，避免出现 NaN 之类的展示。
+ * loadStats 与备份导入共用同一套逻辑，脏备份的 stats（如 totalDecided: NaN）
+ * 无法绕过校验直接透传。
+ */
+export function normalizeStats(raw) {
   if (!isPlainObject(raw)) return { ...DEFAULT_STATS }
   return {
     totalDecided: isFiniteNumber(raw.totalDecided) && raw.totalDecided >= 0 ? Math.floor(raw.totalDecided) : 0,
     firstUsedAt: isFiniteNumber(raw.firstUsedAt) && raw.firstUsedAt > 0 ? raw.firstUsedAt : null,
   }
+}
+
+/** 统计校验：字段类型不对就回退到默认值，避免出现 NaN 之类的展示 */
+export function loadStats() {
+  return normalizeStats(readLocal(KEYS.stats, DEFAULT_STATS))
 }
 
 export function saveStats(stats) {
@@ -395,14 +420,14 @@ export function saveDrinkHistory(list) {
 export function createDrinkHistoryRecord(drink) {
   const now = new Date()
   return {
-    uid: `${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+    uid: `${now.getTime()}-${randomSuffix()}`,
     id: drink.id,
     name: drink.name,
     // 按品类派生本地 emoji（数据里没有 per-SKU 的 emoji 字段，不臆造商品图）
     emoji: drinkEmoji(drink),
     category: drink.category,
     // sweetness 是数组（官方公示的可选糖度），历史记录里只存一个可读摘要
-    taste: drink.sweetness.length ? drink.sweetness.join('/') : null,
+    taste: drink.sweetness?.length ? drink.sweetness.join('/') : null,
     ts: now.getTime(),
   }
 }
@@ -437,13 +462,17 @@ export function saveDrinkDislikes(list) {
 
 const DEFAULT_DRINK_STATS = { totalDecided: 0, firstUsedAt: null }
 
-export function loadDrinkStats() {
-  const raw = readLocal(KEYS.drinkStats, DEFAULT_DRINK_STATS)
+/** 饮料统计归一化（与食物侧同一套校验，供 loadDrinkStats 与备份导入共用） */
+export function normalizeDrinkStats(raw) {
   if (!isPlainObject(raw)) return { ...DEFAULT_DRINK_STATS }
   return {
     totalDecided: isFiniteNumber(raw.totalDecided) && raw.totalDecided >= 0 ? Math.floor(raw.totalDecided) : 0,
     firstUsedAt: isFiniteNumber(raw.firstUsedAt) && raw.firstUsedAt > 0 ? raw.firstUsedAt : null,
   }
+}
+
+export function loadDrinkStats() {
+  return normalizeDrinkStats(readLocal(KEYS.drinkStats, DEFAULT_DRINK_STATS))
 }
 
 export function saveDrinkStats(stats) {
@@ -554,12 +583,12 @@ export function buildBackup({
       favorites: Array.from(new Set(favorites.filter(isNonEmptyString))),
       exclusions: Array.from(new Set(exclusions.filter((tag) => EXCLUSIONS.includes(tag)))),
       filterPrefs: normalizeFilterPrefs(filterPrefs),
-      stats: isPlainObject(stats) ? stats : { ...DEFAULT_STATS },
+      stats: normalizeStats(stats),
       drinkHistory: drinkHistory.filter(isValidDrinkHistoryRecord).slice(0, MAX_HISTORY),
       drinkFavorites: Array.from(new Set(drinkFavorites.filter(isNonEmptyString))),
       drinkExclusions: Array.from(new Set(drinkExclusions.filter((tag) => DRINK_EXCLUSIONS.includes(tag)))),
       drinkPrefs: normalizeDrinkPrefs(drinkPrefs),
-      drinkStats: isPlainObject(drinkStats) ? drinkStats : { ...DEFAULT_DRINK_STATS },
+      drinkStats: normalizeDrinkStats(drinkStats),
     },
   }
 }
@@ -580,7 +609,9 @@ export function serializeBackup(payload) {
  */
 export function parseBackup(text) {
   if (typeof text !== 'string') return { ok: false, reason: '文件内容无法读取' }
-  if (text.length > MAX_BACKUP_BYTES) {
+  // 用 UTF-8 实际字节数而非字符串 length（UTF-16 码元数）：中文 JSON 的实际字节
+  // 约为 length 的 2–3 倍，直接用 length 会把上限放大到 ~1.5MB。
+  if (new TextEncoder().encode(text).length > MAX_BACKUP_BYTES) {
     return { ok: false, reason: `文件过大（超过 ${Math.round(MAX_BACKUP_BYTES / 1024)} KB），已拒绝导入` }
   }
   if (!text.trim()) return { ok: false, reason: '文件内容为空' }
@@ -662,18 +693,44 @@ export function parseBackup(text) {
   return {
     ok: true,
     warnings,
+    // 原始备份是否携带这些字段：缺失时导入不碰用户当前值，
+    // 避免把筛选偏好/统计重置为默认值（老备份没有这些字段）。
+    present: {
+      filterPrefs: data.filterPrefs !== undefined,
+      stats: data.stats !== undefined,
+      drinkPrefs: data.drinkPrefs !== undefined,
+      drinkStats: data.drinkStats !== undefined,
+    },
     data: {
       history,
       favorites,
       exclusions,
       filterPrefs: normalizeFilterPrefs(data.filterPrefs),
-      stats: isPlainObject(data.stats) ? data.stats : null,
+      // stats 走归一化而非直接透传：脏备份的 totalDecided: NaN 之类会被洗成合法值
+      stats: normalizeStats(data.stats),
       drinkHistory,
       drinkFavorites,
       drinkExclusions,
       drinkPrefs: normalizeDrinkPrefs(data.drinkPrefs),
-      drinkStats: isPlainObject(data.drinkStats) ? data.drinkStats : null,
+      drinkStats: normalizeDrinkStats(data.drinkStats),
     },
+  }
+}
+
+/**
+ * 合并两份统计：取「已决定次数」的较大者、首次使用时间的较早者。
+ * 导入语义是并集合并，直接覆盖会丢掉任一端的计数，直接相加会重复计算，
+ * 取 max / 最早时间是在「不丢失」与「不膨胀」之间的折中。
+ */
+function mergeStats(currentStats, incomingStats, normalize) {
+  const current = normalize(currentStats)
+  const incoming = normalize(incomingStats)
+  return {
+    totalDecided: Math.max(current.totalDecided, incoming.totalDecided),
+    firstUsedAt:
+      current.firstUsedAt && incoming.firstUsedAt
+        ? Math.min(current.firstUsedAt, incoming.firstUsedAt)
+        : current.firstUsedAt || incoming.firstUsedAt,
   }
 }
 
@@ -725,14 +782,20 @@ export function mergeImported(current, incoming) {
   const currentDrinkExclusions = Array.isArray(current?.drinkExclusions) ? current.drinkExclusions : []
   const mergedDrinkExclusions = Array.from(new Set([...currentDrinkExclusions, ...(incoming?.drinkExclusions || [])]))
 
+  // 统计：备份导出时包含它们，导入时同样恢复（缺失时回退为当前值，不丢失）。
+  const mergedStats = mergeStats(current?.stats, incoming?.stats, normalizeStats)
+  const mergedDrinkStats = mergeStats(current?.drinkStats, incoming?.drinkStats, normalizeDrinkStats)
+
   return {
     history: finalHistory,
     favorites: mergedFavorites,
     exclusions: mergedExclusions,
+    stats: mergedStats,
     filterPrefs: normalizeFilterPrefs(incoming?.filterPrefs),
     drinkHistory: finalDrinkHistory,
     drinkFavorites: mergedDrinkFavorites,
     drinkExclusions: mergedDrinkExclusions,
+    drinkStats: mergedDrinkStats,
     drinkPrefs: normalizeDrinkPrefs(incoming?.drinkPrefs),
     added: {
       history: Math.max(0, finalHistory.length - currentHistory.length),

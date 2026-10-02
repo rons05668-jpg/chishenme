@@ -30,7 +30,7 @@ const FIELD_LABELS = {
 }
 
 /** 把 UI 上的筛选状态转换成推荐算法需要的结构 */
-export function toPickerFilters(filters) {
+export function toPickerFilters(filters = {}) {
   return {
     budget: BUDGETS.find((item) => item.key === filters.budgetKey) || BUDGETS[0],
     taste: filters.taste,

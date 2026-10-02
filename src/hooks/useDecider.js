@@ -48,6 +48,12 @@ export default function useDecider(pool, context, delay = 900) {
       timeoutRef.current = setTimeout(() => {
         clearInterval(intervalRef.current)
         const current = poolRef.current
+        // 动画期间用户可能改筛选导致候选池变空：此时不抽取、直接结束翻牌状态，
+        // 与上面的 setInterval 回调守卫保持一致。
+        if (!current.length) {
+          setRolling(false)
+          return
+        }
         const candidates = current.filter((food) => !excludeIds.includes(food.id))
         setResult(pickFood(candidates.length ? candidates : current, contextRef.current))
         setRolling(false)

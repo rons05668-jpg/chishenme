@@ -88,6 +88,7 @@ const sameIdSet = (a, b) => {
 
 async function main() {
   const foodsMod = await import(pathToFileURL(path.join(SRC, 'data', 'foods.js')).href)
+  const nycPricesMod = await import(pathToFileURL(path.join(SRC, 'data', 'nyc-prices.js')).href)
   const pickerMod = await import(pathToFileURL(path.join(SRC, 'lib', 'picker.js')).href)
   const filtersMod = await import(pathToFileURL(path.join(SRC, 'lib', 'filters.js')).href)
   const storage = await import(pathToFileURL(path.join(SRC, 'lib', 'storage.js')).href)
@@ -121,12 +122,36 @@ async function main() {
   const budgetByKey = (key) => BUDGETS.find((item) => item.key === key)
   const defaultPickerFilters = toPickerFilters(DEFAULT_FILTERS)
 
+  // 纽约美元价映射：key 为条目 id，值为 [min, max]（美元）
+  const { NYC_PRICE_USD } = nycPricesMod
+  const nycPriceCovered = new Set(Object.keys(NYC_PRICE_USD))
+
   /* ------------------------- 数据完整性 ------------------------- */
+
+  check('01b 纽约美元价映射合法且与条目无漂移', () => {
+    const nycIds = new Set(FOODS.filter((f) => f.region === 'parsons-nyc').map((f) => f.id))
+    const problems = []
+    for (const [id, range] of Object.entries(NYC_PRICE_USD)) {
+      if (!Array.isArray(range) || range.length !== 2) {
+        problems.push(`NYC_PRICE_USD["${id}"] 不是长度 2 的数组`)
+      } else if (!range.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+        problems.push(`NYC_PRICE_USD["${id}"] 含非数字项`)
+      } else if (range[0] > range[1]) {
+        problems.push(`NYC_PRICE_USD["${id}"] 最小值 ${range[0]} > 最大值 ${range[1]}`)
+      }
+      if (!nycIds.has(id)) problems.push(`NYC_PRICE_USD["${id}"] 在 FOODS 里没有对应的 parsons-nyc 条目`)
+    }
+    for (const id of nycIds) {
+      if (!nycPriceCovered.has(id)) problems.push(`parsons-nyc 条目 "${id}" 在 NYC_PRICE_USD 里缺失`)
+    }
+    assert(problems.length === 0, problems.slice(0, 5).join('；'))
+    return `${nycIds.size} 家纽约店美元价齐全`
+  })
 
   check('01 食物条目数与名称无重复', () => {
     assert(Number.isInteger(FOODS.length), 'FOODS 不是数组')
-    // 249 条国内条目 + 100 条「纽约·Parsons」条目
-    assert(FOODS.length === 349, `期望 349 条：实际 ${FOODS.length} 条`)
+    // 249 条国内条目 + 100 条「纽约·Parsons」条目；只设下限，加数据不用改脚本
+    assert(FOODS.length >= 349, `期望至少 349 条：实际 ${FOODS.length} 条`)
     assert(new Set(FOODS.map((f) => f.name.trim())).size === FOODS.length, '存在重复名称')
     assert(CATEGORIES.length === 11, '应有 11 个食物类型')
     return `${FOODS.length} 条`
@@ -157,6 +182,11 @@ async function main() {
         problems.push(`${at} 的 price 含非数字项`)
       } else if (price[0] > price[1]) {
         problems.push(`${at} 的 price 最小值 ${price[0]} > 最大值 ${price[1]}`)
+      }
+      // 纽约条目的人均美元价在 nyc-prices.js 的 NYC_PRICE_USD 映射里（展示时用 $
+      // 而不是 ¥，避免误导在美用户）；此处只做映射覆盖校验，合法性由专项 check 负责
+      if (food.region === 'parsons-nyc' && !nycPriceCovered.has(food.id)) {
+        problems.push(`${at} 在 NYC_PRICE_USD 映射里没有对应美元价`)
       }
       const scenes = food.scenes
       if (!Array.isArray(scenes) || scenes.length === 0) {

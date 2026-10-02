@@ -27,4 +27,4 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       # 只装 chromium：e2e 用例全部跑在 chromium 上，装 firefox/webkit 纯属浪费
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npx playwright test --project=chromium

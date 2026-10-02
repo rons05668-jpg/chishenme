@@ -417,10 +417,11 @@ test('手机端横向不溢出（核心页面）', async ({ page }) => {
 /** 展开饮料筛选面板的次要条件（甜度 / 咖啡因 / 忌口） */
 async function openDrinkFilters(page) {
   const toggle = page.locator('.filter-toggle')
-  if (await toggle.count()) {
-    const expanded = await toggle.getAttribute('aria-expanded')
-    if (expanded !== 'true') await toggle.click()
-  }
+  // 路由懒加载后页面 chunk 异步到达：先等 toggle 挂载再判断，
+  // 否则 count() 可能在 chunk 到达前返回 0，导致面板没被展开
+  await expect(toggle).toBeAttached({ timeout: 15000 })
+  const expanded = await toggle.getAttribute('aria-expanded')
+  if (expanded !== 'true') await toggle.click()
 }
 
 /**

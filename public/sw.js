@@ -21,18 +21,35 @@ self.addEventListener('install', (event) => {
        */
       await cache.addAll(PRECACHE)
 
-      // 首次访问的 JS/CSS 在注册 SW 之前已加载，必须主动预缓存才能首次安装后离线使用。
-      const response = await fetch('/index.html', { cache: 'reload' })
-      if (!response.ok) throw new Error('离线页面预缓存失败')
-      const html = await response.text()
-      const assets = [...new Set(
-        [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1])
-      )]
+      /*
+       * 第二段 —— 构建产物（带内容哈希的 /assets/*.js|css）。
+       * 清单由构建脚本 scripts/gen-precache.cjs 生成（dist/precache.json），
+       * 包含路由懒加载的动态 chunk——它们不会出现在 index.html 里，
+       * 只解析 index.html 的话，离线时访问懒路由会白屏。
+       * 逐个缓存：单个失败只 console.warn 跳过，不影响 SW 安装成功。
+       * 清单拿不到时（极端情况）降级为解析 index.html。
+       */
+      let extraAssets = []
+      try {
+        const manifest = await fetch('/precache.json', { cache: 'reload' })
+        if (manifest.ok) extraAssets = await manifest.json()
+      } catch {
+        /* 降级走下面的 index.html 解析 */
+      }
+      if (!Array.isArray(extraAssets) || !extraAssets.length) {
+        // 首次访问的 JS/CSS 在注册 SW 之前已加载，必须主动预缓存才能首次安装后离线使用。
+        const response = await fetch('/index.html', { cache: 'reload' })
+        if (!response.ok) throw new Error('离线页面预缓存失败')
+        const html = await response.text()
+        extraAssets = [...new Set(
+          [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1])
+        )]
+      }
 
-      const results = await Promise.allSettled(assets.map((asset) => cache.add(asset)))
+      const results = await Promise.allSettled(extraAssets.map((asset) => cache.add(asset)))
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
-          console.warn('[sw] 构建产物预缓存失败，已跳过：', assets[index], result.reason)
+          console.warn('[sw] 构建产物预缓存失败，已跳过：', extraAssets[index], result.reason)
         }
       })
     })

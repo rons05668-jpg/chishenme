@@ -20,11 +20,33 @@ export default defineConfig({
   preserveOutput: 'always',
   use: {
     baseURL: 'http://127.0.0.1:4173',
-    ...devices['iPhone 13'],
-    defaultBrowserType: 'chromium',
-    channel: process.env.PW_CHANNEL || undefined,
     trace: 'retain-on-failure',
   },
+  /*
+   * 双工程：
+   *  - chromium：原有 core.spec.js（功能回归），跑在 iPhone 13 模拟上
+   *  - webkit：新增的 pwa.spec.js（SW 安装 / 离线 / 更新提示），
+   *    README 明确主目标是 iPhone 主屏，Safari 的 PWA 行为需要单独覆盖
+   */
+  projects: [
+    {
+      name: 'chromium',
+      testMatch: '**/core.spec.js',
+      use: {
+        ...devices['iPhone 13'],
+        browserName: 'chromium',
+        channel: process.env.PW_CHANNEL || undefined,
+      },
+    },
+    {
+      name: 'webkit',
+      testMatch: '**/pwa.spec.js',
+      use: {
+        ...devices['iPhone 13'],
+        browserName: 'webkit',
+      },
+    },
+  ],
   webServer: {
     command: 'npm run preview -- --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',

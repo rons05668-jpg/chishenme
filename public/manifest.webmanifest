@@ -1,6 +1,7 @@
 {
   "name": "今天吃什么？",
   "short_name": "今天吃什么",
+  "id": "/",
   "description": "随机抽一个，或者转个盘，把今天的吃饭决定交给命运。",
   "start_url": "/",
   "scope": "/",
@@ -10,6 +11,18 @@
   "theme_color": "#FFF8F2",
   "lang": "zh-CN",
   "categories": ["food", "lifestyle", "utilities"],
+  "shortcuts": [
+    {
+      "name": "随机吃什么",
+      "url": "/#/random",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "今天喝什么",
+      "url": "/#/drink",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",

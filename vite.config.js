@@ -18,6 +18,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 900,
+    // 保持默认 500：bundle 膨胀时要收到告警，而不是把阈值抬高消音
+    chunkSizeWarningLimit: 500,
   },
 })

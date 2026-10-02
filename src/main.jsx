@@ -46,8 +46,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
           })
         })
       })
-      .catch(() => {
-        /* 注册失败不影响正常使用 */
+      .catch((error) => {
+        // 注册失败不影响正常使用，但要留一条可观测的记录，
+        // 否则线上 SW 失效时完全无从排查。
+        console.warn('[pwa] service worker 注册失败', error)
       })
   })
 }

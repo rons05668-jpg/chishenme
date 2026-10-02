@@ -45,17 +45,36 @@ export default [
       // 纯 JavaScript 项目，不使用 prop-types
       'react/prop-types': 'off',
       /*
-       * 以下两条属于 React Compiler 时代的规则，本项目未启用 React Compiler，
-       * 且现有实现是有意为之，规则在此会产生误报，故显式关闭：
-       *  - set-state-in-effect：本项目的普遍模式是「依赖变化 → effect 重置派生 state」，
-       *    例如筛选条件一变就让结果弹窗失效、转盘停转、matchMedia 首次同步。
-       *    这是有意的派生状态重置，不是外部系统订阅写错。
-       *  - refs：WheelPage 刻意用 ref 保存最新加权上下文，避免「就吃这个」之后
-       *    转盘候选在用户眼前被悄悄换掉（见该文件内注释）。这是有意的读取时机控制。
+       * react-hooks/set-state-in-effect 与 react-hooks/refs 曾在全仓关闭，
+       * 现改为按文件豁免（见下方 overrides）：新代码的误用会被 lint 拦下，
+       * 只有注释里写明「有意为之」的现有三处（派生状态重置 / ref 时机控制）
+       * 保留豁免。
        */
-      'react-hooks/set-state-in-effect': 'off',
-      'react-hooks/refs': 'off',
     },
+  },
+
+  /*
+   * 有意的派生状态重置（筛选条件一变就让结果弹窗失效 / 候选变化就重置转盘 /
+   * matchMedia 首次同步），不是外部系统订阅写错，故局部豁免 set-state-in-effect。
+   */
+  {
+    files: ['src/pages/WheelPage.jsx', 'src/components/Wheel.jsx', 'src/hooks/useMediaQuery.js'],
+    rules: { 'react-hooks/set-state-in-effect': 'off' },
+  },
+
+  /*
+   * 有意的 ref 读取时机控制（转盘候选 / 抽取上下文 / 持久化状态镜像），
+   * 不是误用，故局部豁免 refs。
+   */
+  {
+    files: [
+      'src/hooks/useDecider.js',
+      'src/components/Wheel.jsx',
+      'src/pages/WheelPage.jsx',
+      'src/pages/DrinkPage.jsx',
+      'src/state/AppState.jsx',
+    ],
+    rules: { 'react-hooks/refs': 'off' },
   },
 
   /* --------------------------- Service Worker --------------------------- */

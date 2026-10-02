@@ -3,7 +3,7 @@
  * 生产启动脚本（供云托管 / 单端口沙箱使用）
  * ------------------------------------------------------------------
  * 平台会注入 PORT 环境变量，并要求服务监听 0.0.0.0。
- * 流程：产物缺失时先执行 vite build，然后以 0.0.0.0:$PORT 启动静态预览。
+ * 流程：产物缺失时先执行 npm run build，然后以 0.0.0.0:$PORT 启动静态预览。
  *
  * 本地也可以直接跑：npm start（默认 4173 端口）
  */
@@ -22,8 +22,10 @@ if (!fs.existsSync(VITE_BIN)) {
 }
 
 if (!fs.existsSync(DIST_INDEX)) {
-  console.log('[serve] 未找到构建产物，先执行 vite build …')
-  const build = spawnSync(process.execPath, [VITE_BIN, 'build'], { cwd: ROOT, stdio: 'inherit' })
+  // 注意：必须走 npm run build（vite build + gen-precache），不能直接调 vite build——
+  // 后者会跳过 precache.json 生成和 sw.js 的 BUILD_ID 注入，导致 SW 永不更新。
+  console.log('[serve] 未找到构建产物，先执行 npm run build …')
+  const build = spawnSync('npm', ['run', 'build'], { cwd: ROOT, stdio: 'inherit', shell: true })
   if (build.status !== 0) {
     console.error('[serve] 构建失败，已中止')
     process.exit(build.status ?? 1)

@@ -360,11 +360,11 @@ npm run dev
 | `npm run serve` | 预览构建产物并监听所有网卡（`0.0.0.0:4173`），便于用手机访问同一局域网地址测试 |
 | `npm run icons` | 重新生成 `public/icons/` 下的 PWA 图标 |
 | `npm run lint` | ESLint 扁平配置静态检查（`eslint .`，要求零错误零警告） |
-| `npm run check:data` | 运行 38 项数据、推荐、存储与备份检查，失败时退出码为 1（含条目数下限、11 个类型、23 条短名映射、地点枚举与筛选语义等断言） |
-| `npm run test:unit` | Node 内置 `node:test` 单元测试（`picker.js` / `filters.js` 的权重、抽样、洗牌与地点筛选），零第三方依赖 |
-| `npm run test:e2e` | 构建后运行手机端浏览器回归测试（随机、收藏、历史、忌口、转盘、地点、离线） |
+| `npm run check:data` | 运行 39 项数据、推荐、存储与备份检查，失败时退出码为 1（含条目数下限、11 个类型、23 条短名映射、地点枚举与筛选语义、纽约美元价映射等断言） |
+| `npm run test:unit` | Node 内置 `node:test` 单元测试（picker / filters / drinkPicker / storage / drinks-meta 一致性），零第三方依赖 |
+| `npm run test:e2e` | 构建后运行手机端浏览器回归测试（随机、收藏、历史、忌口、转盘、地点、离线）；CI 里拆成 chromium（core.spec.js）与 webkit（pwa.spec.js）两个 job |
 
-首次运行浏览器测试先执行 `npx playwright install chromium`。本机已安装 Chrome 时可设置环境变量 `PW_CHANNEL=chrome`。
+首次运行浏览器测试先执行 `npx playwright install --with-deps chromium`（与 CI 一致）。本机已安装 Chrome 时可设置环境变量 `PW_CHANNEL=chrome`。
 `tests/unit/` 下的单元测试命名为 `*.test.cjs`，由 `node --test` 运行；Playwright 的 `testMatch` 已收窄为 `**/*.spec.js`，两者互不误抓。
 GitHub Actions 对 main 推送和 PR 执行 `npm ci`、ESLint、数据检查、单元测试、依赖审计、生产构建及浏览器测试（缓存 `~/.cache/ms-playwright`，只安装 chromium）。Dependabot 定期检查 npm 和 Actions 更新。
 Vercel 保留现有项目及 main 生产分支，安装命令使用 `npm ci`；响应头补充 MIME 嗅探、来源信息及嵌入保护。

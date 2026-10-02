@@ -335,7 +335,7 @@ today-eat-what/
 
 ## 本地运行
 
-**环境要求**：Node.js `>=22.22.0 <23`（`package.json` 的 `engines` 字段）。仓库内置 `.nvmrc`（内容为 `22`），CI 通过 `actions/setup-node` 的 `node-version-file: .nvmrc` 读取，因此本地、CI、生产构建使用同一 Node 主版本。
+**环境要求**：Node.js `>=22`（`package.json` 的 `engines` 字段）。仓库内置 `.nvmrc`（内容为 `22`），CI 通过 `actions/setup-node` 的 `node-version-file: .nvmrc` 读取，因此本地、CI、生产构建使用同一 Node 主版本。
 
 ```bash
 # 1. 安装依赖
@@ -360,7 +360,7 @@ npm run dev
 | `npm run serve` | 预览构建产物并监听所有网卡（`0.0.0.0:4173`），便于用手机访问同一局域网地址测试 |
 | `npm run icons` | 重新生成 `public/icons/` 下的 PWA 图标 |
 | `npm run lint` | ESLint 扁平配置静态检查（`eslint .`，要求零错误零警告） |
-| `npm run check:data` | 运行 37 项数据、推荐、存储与备份检查，失败时退出码为 1（含 349 条条目数、11 个类型、23 条短名映射、地点枚举与筛选语义等断言） |
+| `npm run check:data` | 运行 38 项数据、推荐、存储与备份检查，失败时退出码为 1（含条目数下限、11 个类型、23 条短名映射、地点枚举与筛选语义等断言） |
 | `npm run test:unit` | Node 内置 `node:test` 单元测试（`picker.js` / `filters.js` 的权重、抽样、洗牌与地点筛选），零第三方依赖 |
 | `npm run test:e2e` | 构建后运行手机端浏览器回归测试（随机、收藏、历史、忌口、转盘、地点、离线） |
 
@@ -453,7 +453,7 @@ npm run icons
 >
 > - `vercel.json` 显式锁定 `framework: vite`、`buildCommand: npm run build`、`outputDirectory: dist`、`installCommand: npm ci`；同时为 `/sw.js` 设置了 `must-revalidate`、为 `/assets/*` 设置了长缓存。
 > - `.vercelignore` 已排除 `node_modules`、`dist`、`.workbuddy-ai`、Vite 时间戳临时文件与部署包本身。
-> - `package.json` 提供 `deploy` 脚本（等价于 `npx vercel --prod`），`engines.node` 要求为 `>=22.22.0 <23`（见 `.nvmrc`）。
+> - `package.json` 提供 `deploy` 脚本（等价于 `npx vercel --prod`），`engines.node` 要求为 `>=22`（见 `.nvmrc`）。
 > - 使用 HashRouter，**不需要**配置 `rewrites` / history fallback，刷新子路由不会 404。
 
 **方式 A：命令行（最快）**

@@ -8,7 +8,7 @@ import { drinkPriceLabel, getDrinkById } from '../data/drinks'
 import { getBrandById } from '../data/brands'
 import { getFoodById, priceLabel } from '../data/foods'
 import { pickFood, respectsExclusions } from '../lib/picker'
-import { useAppState } from '../state/AppState'
+import { useAppState, useToastActions } from '../state/AppState'
 
 export default function FavoritesPage() {
   const {
@@ -21,8 +21,8 @@ export default function FavoritesPage() {
     dislikeFood,
     drinkFavorites,
     toggleDrinkFavorite,
-    showToast,
   } = useAppState()
+  const { showToast } = useToastActions()
   const navigate = useNavigate()
   const [result, setResult] = useState(null)
 
@@ -109,7 +109,7 @@ export default function FavoritesPage() {
             style={{ marginTop: 10 }}
             onClick={() => navigate('/random')}
           >
-            🎲 去随机一个
+            <span aria-hidden="true">🎲</span> 去随机一个
           </button>
         </div>
       ) : favoriteFoods.length === 0 ? (
@@ -121,7 +121,7 @@ export default function FavoritesPage() {
             className="btn btn--primary btn--lg btn--block"
             onClick={pickFromFavorites}
           >
-            🎲 从收藏里随机一个
+            <span aria-hidden="true">🎲</span> 从收藏里随机一个
           </button>
 
           {exclusions.length > 0 ? <p className="tiny">按已保存忌口筛选：{eligibleFoods.length} 个可选，收藏记录均保留。</p> : null}

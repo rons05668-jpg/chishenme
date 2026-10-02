@@ -5,7 +5,7 @@ import TopBar from '../components/TopBar'
 import { getDrinkById } from '../data/drinks'
 import { getBrandById } from '../data/brands'
 import { formatTime, groupHistoryByDay } from '../lib/picker'
-import { useAppState } from '../state/AppState'
+import { useAppState, useToastActions } from '../state/AppState'
 
 export default function HistoryPage() {
   const {
@@ -17,8 +17,8 @@ export default function HistoryPage() {
     drinkHistory,
     removeDrinkHistoryRecord,
     clearDrinkHistory,
-    showToast,
   } = useAppState()
+  const { showToast } = useToastActions()
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const [confirmingDrink, setConfirmingDrink] = useState(false)
@@ -151,7 +151,7 @@ export default function HistoryPage() {
             style={{ marginTop: 10 }}
             onClick={() => navigate('/random')}
           >
-            🎲 去随机一个
+            <span aria-hidden="true">🎲</span> 去随机一个
           </button>
         </div>
       ) : history.length === 0 ? (

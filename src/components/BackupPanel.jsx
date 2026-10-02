@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { BACKUP_FORMAT_VERSION, MAX_BACKUP_BYTES } from '../lib/storage'
-import { useAppState } from '../state/AppState'
+import { useAppState, useToastActions } from '../state/AppState'
 
 /**
  * 本地数据备份面板
@@ -16,7 +16,8 @@ import { useAppState } from '../state/AppState'
 const MAX_KB = Math.round(MAX_BACKUP_BYTES / 1024)
 
 export default function BackupPanel() {
-  const { exportBackup, importBackup, showToast, history, favorites, exclusions } = useAppState()
+  const { exportBackup, importBackup, history, favorites, exclusions } = useAppState()
+  const { showToast } = useToastActions()
   const fileInputRef = useRef(null)
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState(null)
@@ -140,7 +141,7 @@ export default function BackupPanel() {
           onClick={handleExport}
           disabled={!canExport}
         >
-          💾 导出备份
+          <span aria-hidden="true">💾</span> 导出备份
         </button>
 
         <button
@@ -149,7 +150,7 @@ export default function BackupPanel() {
           onClick={handlePickFile}
           disabled={!canImport || importing}
         >
-          {importing ? '⏳ 正在导入…' : '📥 选择备份文件导入'}
+          {importing ? (<><span aria-hidden="true">⏳</span> 正在导入…</>) : (<><span aria-hidden="true">📥</span> 选择备份文件导入</>)}
         </button>
 
         {/* 原生 input 会被隐藏，用上面的 label 式按钮触发，保证外观统一 */}

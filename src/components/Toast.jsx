@@ -1,9 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useAppState } from '../state/AppState'
+import { useToastState } from '../state/AppState'
 
 /** 全局轻提示 */
 export default function Toast() {
-  const { toast } = useAppState()
+  const { toast } = useToastState()
 
   return (
     <AnimatePresence>

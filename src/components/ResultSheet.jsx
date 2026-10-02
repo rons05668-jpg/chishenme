@@ -7,8 +7,29 @@ const FOCUSABLE =
 
 /**
  * 底部弹出结果面板（转盘停止后展示）
+ * ------------------------------------------------------------------
+ * props:
+ *  - food / onEat / onReroll / onDislike   食物结果（默认渲染 FoodResultCard）
+ *  - card            自定义卡片节点：传入后替代默认的食物卡片
+ *                    （饮品页传入 DrinkResultCard，复用同一套无障碍处理）
+ *  - open            是否打开
+ *  - onClose         关闭回调（调用方请用 useCallback 包裹，避免重复绑定/解绑）
+ *  - title           对话框无障碍名称
+ *  - dismissLabel    底部「再想想」按钮文案
+ *
+ * 无障碍：Esc 关闭、焦点移入并陷阱循环、背景滚动锁定、关闭后焦点归还。
  */
-export default function ResultSheet({ food, open, onClose, onEat, onReroll, onDislike }) {
+export default function ResultSheet({
+  food = null,
+  open,
+  onClose,
+  onEat,
+  onReroll,
+  onDislike,
+  card = null,
+  title = '转盘结果',
+  dismissLabel = '先不看，我再想想',
+}) {
   const sheetRef = useRef(null)
   const restoreRef = useRef(null)
 
@@ -20,7 +41,7 @@ export default function ResultSheet({ food, open, onClose, onEat, onReroll, onDi
 
   // 弹窗打开期间的通用处理：Esc 关闭、焦点入内并循环、背景滚动锁定、关闭后还原
   useEffect(() => {
-    if (!open || !food) return undefined
+    if (!open) return undefined
 
     // 记录打开前的焦点，关闭时归还
     restoreRef.current = document.activeElement
@@ -80,16 +101,31 @@ export default function ResultSheet({ food, open, onClose, onEat, onReroll, onDi
         restore.focus({ preventScroll: true })
       }
     }
-  }, [open, food, onClose])
+  }, [open, onClose])
 
   const backdropTransition = reducedMotion ? { duration: 0 } : { duration: 0.22 }
   const sheetTransition = reducedMotion
     ? { duration: 0 }
     : { type: 'spring', stiffness: 300, damping: 32 }
 
+  const body =
+    card ||
+    (food ? (
+      <FoodResultCard
+        food={food}
+        eyebrow="🎉 转盘结果"
+        onEat={onEat}
+        onReroll={onReroll}
+        onDislike={onDislike}
+        rerollLabel="🎡 再转一次"
+        eatLabel="✅ 就吃这个"
+        showFavorite={false}
+      />
+    ) : null)
+
   return (
     <AnimatePresence>
-      {open && food ? (
+      {open && body ? (
         <motion.div
           className="sheet-backdrop"
           initial={{ opacity: 0 }}
@@ -108,22 +144,13 @@ export default function ResultSheet({ food, open, onClose, onEat, onReroll, onDi
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="转盘结果"
+            aria-label={title}
             tabIndex={-1}
           >
             <div className="sheet__handle" />
-            <FoodResultCard
-              food={food}
-              eyebrow="🎉 转盘结果"
-              onEat={onEat}
-              onReroll={onReroll}
-              onDislike={onDislike}
-              rerollLabel="🎡 再转一次"
-              eatLabel="✅ 就吃这个"
-              showFavorite={false}
-            />
+            {body}
             <button type="button" className="btn btn--quiet btn--block" onClick={onClose}>
-              先不看，我再想想
+              {dismissLabel}
             </button>
           </motion.div>
         </motion.div>

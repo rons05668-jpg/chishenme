@@ -8,11 +8,12 @@ import { EMPTY_RESULT_HINT } from '../lib/content'
 import { filterFoods } from '../lib/picker'
 import useDecider from '../hooks/useDecider'
 import useMediaQuery from '../hooks/useMediaQuery'
-import { useAppState } from '../state/AppState'
+import { useAppState, useToastActions } from '../state/AppState'
 
 export default function RandomPage() {
-  const { filters, updateFilters, resetFilters, history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } =
+  const { filters, updateFilters, resetFilters, history, favorites, dislikes, exclusions, recordEaten, dislikeFood } =
     useAppState()
+  const { showToast } = useToastActions()
 
   // 手机端：筛选面板切换为紧凑模式（次要条件折叠）
   const isMobile = useMediaQuery('(max-width: 640px)')
@@ -164,6 +165,10 @@ export default function RandomPage() {
           </motion.div>
         ) : result && pool.some((food) => food.id === result.id) ? (
           <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            {/* 读屏播报：翻牌动画本身无障碍信息，这里显式播报结果 */}
+            <p className="visually-hidden" role="status">
+              抽到：{result.name}
+            </p>
             <FoodResultCard
               food={result}
               onEat={handleEat}

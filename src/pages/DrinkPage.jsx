@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import DrinkFilterPanel from '../components/DrinkFilterPanel'
 import DrinkResultCard from '../components/DrinkResultCard'
+import ResultSheet from '../components/ResultSheet'
 import TopBar from '../components/TopBar'
 import Wheel from '../components/Wheel'
 import {
@@ -16,7 +17,7 @@ import {
 import { drinkShortName } from '../data/drinks'
 import { EMPTY_DRINK_POOL_HINT, EMPTY_DRINK_RESULT_HINT } from '../lib/content'
 import useMediaQuery from '../hooks/useMediaQuery'
-import { useAppState } from '../state/AppState'
+import { useAppState, useToastActions } from '../state/AppState'
 
 /**
  * 「喝什么」页面
@@ -40,8 +41,8 @@ export default function DrinkPage() {
     drinkExclusions,
     recordDrink,
     dislikeDrink,
-    showToast,
   } = useAppState()
+  const { showToast } = useToastActions()
 
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 640px)')
@@ -51,6 +52,7 @@ export default function DrinkPage() {
   const [rolling, setRolling] = useState(false)
   const [result, setResult] = useState(null)
   const [sheetDrink, setSheetDrink] = useState(null)
+  const [spinSignal, setSpinSignal] = useState(0)
 
   const pickerFilters = useMemo(
     () => toDrinkPickerFilters({ ...drinkFilters, exclusions: drinkExclusions }),
@@ -62,6 +64,13 @@ export default function DrinkPage() {
     () => ({ history: drinkHistory, dislikes: drinkDislikes, favorites: drinkFavorites }),
     [drinkHistory, drinkDislikes, drinkFavorites]
   )
+
+  // 用 ref 读取最新的加权上下文：候选只在「条件变化」时重算，
+  // 否则用户点完「就喝这个」后转盘会在眼前悄悄换掉一批候选（与 WheelPage 一致）。
+  const contextRef = useRef(context)
+  useEffect(() => {
+    contextRef.current = context
+  }, [context])
 
   // 零候选放宽建议：countFor 注入当前忌口，保证建议只涉及普通条件
   const relaxations = useMemo(
@@ -102,17 +111,25 @@ export default function DrinkPage() {
     showToast('已减少它的出现概率', '🙅')
   }
 
-  // 转盘候选：严格筛选，绝不补入条件外饮品
+  // 转盘候选：严格筛选，绝不补入条件外饮品。
+  // 注意：这里有意用 ref 读最新的加权上下文（与 WheelPage 相同的模式），
+  // 候选只在条件变化时重算，见上方 contextRef 的注释。
   const wheelItems = useMemo(
-    () => (mode === 'wheel' ? buildDrinkWheelPool(pickerFilters, context, MAX_SEGMENTS) : []),
-    [mode, pickerFilters, context]
+    () => (mode === 'wheel' ? buildDrinkWheelPool(pickerFilters, contextRef.current, MAX_SEGMENTS) : []),
+    [mode, pickerFilters]
   )
 
-  const handleReload = () => {
-    setResult(null)
+  /**
+   * 「再转一次」：关掉结果弹层，并让转盘真正再转一次。
+   * 以前这里只有关弹层（spinSignal 传的是常量 0），按钮名不副实；
+   * 现在 spinSignal 是可变 state，+1 即触发 Wheel 重新旋转（与 WheelPage 一致）。
+   */
+  const handleReload = useCallback(() => {
     setSheetDrink(null)
-    showToast('已重置结果', '🔄')
-  }
+    setSpinSignal((value) => value + 1)
+  }, [])
+
+  const closeSheet = useCallback(() => setSheetDrink(null), [])
 
   return (
     <div className="page">
@@ -121,29 +138,32 @@ export default function DrinkPage() {
         subtitle="一杯的选择，也别为难自己"
         right={
           <button type="button" className="btn btn--sm btn--ghost" onClick={() => navigate('/')}>
-            🏠 首页
+            <span aria-hidden="true">🏠</span> 首页
           </button>
         }
       />
 
-      <div className="mode-switch" role="tablist" aria-label="玩法切换">
+      {/*
+        玩法切换：之前误用了 role="tablist" / role="tab"，
+        但没有 tabpanel / aria-controls / 方向键导航，读屏播报与行为不符。
+        这里只是两个互斥的操作按钮，用带 aria-pressed 的普通按钮组即可。
+      */}
+      <div className="mode-switch" role="group" aria-label="玩法切换">
         <button
           type="button"
-          role="tab"
-          aria-selected={mode === 'random'}
+          aria-pressed={mode === 'random'}
           className={`mode-switch__item${mode === 'random' ? ' is-active' : ''}`}
           onClick={() => setMode('random')}
         >
-          🎲 随机一杯
+          <span aria-hidden="true">🎲</span> 随机一杯
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected={mode === 'wheel'}
+          aria-pressed={mode === 'wheel'}
           className={`mode-switch__item${mode === 'wheel' ? ' is-active' : ''}`}
           onClick={() => setMode('wheel')}
         >
-          🎡 转转盘
+          <span aria-hidden="true">🎡</span> 转转盘
         </button>
       </div>
 
@@ -260,6 +280,10 @@ export default function DrinkPage() {
               </motion.div>
             ) : result && pool.some((drink) => drink.id === result.id) ? (
               <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                {/* 读屏播报：随机过程无障碍信息，这里显式播报结果 */}
+                <p className="visually-hidden" role="status">
+                  抽到：{result.name}
+                </p>
                 <DrinkResultCard
                   drink={result}
                   onEat={handleDrink}
@@ -315,7 +339,7 @@ export default function DrinkPage() {
               items={wheelItems}
               context={context}
               onResult={setSheetDrink}
-              spinSignal={0}
+              spinSignal={spinSignal}
               spinLabel="转一下"
               shortNameOf={drinkShortName}
               weightOfFn={weightOfDrink}
@@ -324,7 +348,9 @@ export default function DrinkPage() {
           )}
 
           <div className="card card--tint">
-            <div className="section-title">🎯 转盘说明</div>
+            <div className="section-title">
+              <span aria-hidden="true">🎯</span> 转盘说明
+            </div>
             <p className="tiny" style={{ marginTop: 6, lineHeight: 1.7 }}>
               转盘候选严格符合筛选和忌口条件；停下来的那一格就是今天的答案，点击中间的按钮开始。
             </p>
@@ -332,13 +358,28 @@ export default function DrinkPage() {
         </>
       )}
 
-      {/* 结果弹层（转盘模式） */}
-      <DrinkResultSheet
-        drink={sheetDrink}
-        onClose={() => setSheetDrink(null)}
-        onDrink={handleDrink}
-        onReroll={handleReload}
-        onDislike={handleDislike}
+      {/*
+        转盘结果弹层：复用 ResultSheet（Esc 关闭 / 焦点陷阱 / 焦点归还 /
+        背景滚动锁定），只把卡片换成饮品版。
+      */}
+      <ResultSheet
+        open={Boolean(sheetDrink)}
+        onClose={closeSheet}
+        dismissLabel="先不喝，我再想想"
+        card={
+          sheetDrink ? (
+            <DrinkResultCard
+              drink={sheetDrink}
+              eyebrow="🎉 转盘结果"
+              onEat={handleDrink}
+              onReroll={handleReload}
+              onDislike={handleDislike}
+              rerollLabel="🎡 再转一次"
+              eatLabel="✅ 就喝这个"
+              showFavorite={false}
+            />
+          ) : null
+        }
       />
 
       {drinkFavorites.length || drinkHistory.length ? (
@@ -346,39 +387,6 @@ export default function DrinkPage() {
           已收藏 {drinkFavorites.length} 种 · 最近喝过 {drinkHistory.length} 条（与食物的记录相互独立）
         </p>
       ) : null}
-    </div>
-  )
-}
-
-/**
- * 转盘结果的底部弹层（与 ResultSheet 同构，展示饮品卡片）
- */
-function DrinkResultSheet({ drink, onClose, onDrink, onReroll, onDislike }) {
-  if (!drink) return null
-  return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div
-        className="sheet"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="转盘结果"
-      >
-        <div className="sheet__handle" />
-        <DrinkResultCard
-          drink={drink}
-          eyebrow="🎉 转盘结果"
-          onEat={onDrink}
-          onReroll={onReroll}
-          onDislike={onDislike}
-          rerollLabel="🎡 再转一次"
-          eatLabel="✅ 就喝这个"
-          showFavorite={false}
-        />
-        <button type="button" className="btn btn--quiet btn--block" onClick={onClose}>
-          先不喝，我再想想
-        </button>
-      </div>
     </div>
   )
 }

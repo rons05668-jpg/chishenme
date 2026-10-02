@@ -224,7 +224,8 @@ export default function Wheel({
           className="wheel-center"
           onClick={spin}
           disabled={spinning || count < 2}
-          aria-label="开始旋转"
+          // 无障碍名称跟随状态：之前固定 "开始旋转"，转动中与可见文本（"转动中…"）不一致
+          aria-label={spinning ? '转盘转动中' : '开始旋转'}
         >
           {spinning ? (
             <span>

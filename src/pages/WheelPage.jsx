@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import FilterPanel from '../components/FilterPanel'
 import ResultSheet from '../components/ResultSheet'
@@ -8,13 +8,14 @@ import FoodResultCard from '../components/FoodResultCard'
 import { regionPoolNote, suggestRelaxations, summarizeFilters, toPickerFilters } from '../lib/filters'
 import { buildWheelPool, filterFoods } from '../lib/picker'
 import useMediaQuery from '../hooks/useMediaQuery'
-import { useAppState } from '../state/AppState'
+import { useAppState, useToastActions } from '../state/AppState'
 
 const MAX_SEGMENTS = 10
 
 export default function WheelPage() {
-  const { filters, updateFilters, resetFilters, history, favorites, dislikes, exclusions, recordEaten, dislikeFood, showToast } =
+  const { filters, updateFilters, resetFilters, history, favorites, dislikes, exclusions, recordEaten, dislikeFood } =
     useAppState()
+  const { showToast } = useToastActions()
   const [showFilters, setShowFilters] = useState(false)
   const [batch, setBatch] = useState(0)
   const [spinSignal, setSpinSignal] = useState(0)
@@ -64,6 +65,10 @@ export default function WheelPage() {
 
   const handleResult = (food) => setSheetFood(food)
 
+  // useCallback 包裹：ResultSheet 的 effect 依赖 onClose，
+  // 传内联箭头会导致父级每次重渲染都重复绑定/解绑并拽回焦点。
+  const closeSheet = useCallback(() => setSheetFood(null), [])
+
   const handleEat = (food) => {
     recordEaten(food)
     setSheetFood(null)
@@ -108,7 +113,7 @@ export default function WheelPage() {
             onClick={handleNewBatch}
             disabled={spinning}
           >
-            🔄 换一批
+            <span aria-hidden="true">🔄</span> 换一批
           </button>
         }
       />
@@ -117,6 +122,8 @@ export default function WheelPage() {
         type="button"
         className="filter-toggle"
         onClick={() => setShowFilters((value) => !value)}
+        aria-expanded={showFilters}
+        aria-controls="wheel-filter-panel"
       >
         <span className="filter-toggle__text">
           <span aria-hidden="true">🎛️</span>
@@ -129,6 +136,7 @@ export default function WheelPage() {
         {showFilters ? (
           <motion.div
             key="filters"
+            id="wheel-filter-panel"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -196,7 +204,7 @@ export default function WheelPage() {
       <ResultSheet
         food={sheetFood}
         open={Boolean(sheetFood)}
-        onClose={() => setSheetFood(null)}
+        onClose={closeSheet}
         onEat={handleEat}
         onReroll={handleReroll}
         onDislike={handleDislike}

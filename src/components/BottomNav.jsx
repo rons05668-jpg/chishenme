@@ -10,7 +10,7 @@ const ITEMS = [
 
 export default function BottomNav() {
   return (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav" aria-label="主导航">
       {ITEMS.map((item) => (
         <NavLink
           key={item.to}

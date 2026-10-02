@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import FilterPanel from '../components/FilterPanel'
 import FoodResultCard from '../components/FoodResultCard'
 import TopBar from '../components/TopBar'
-import { suggestRelaxations, toPickerFilters } from '../lib/filters'
+import { regionPoolNote, suggestRelaxations, toPickerFilters } from '../lib/filters'
 import { EMPTY_RESULT_HINT } from '../lib/content'
 import { filterFoods } from '../lib/picker'
 import useDecider from '../hooks/useDecider'
@@ -37,6 +37,9 @@ export default function RandomPage() {
     () => suggestRelaxations(filters, (next) => filterFoods(toPickerFilters({ ...next, exclusions })).length),
     [filters, exclusions]
   )
+
+  // 地点维度的补充说明：外地候选池天然更小，零候选时要说明原因（「平时」下为空串）
+  const regionNote = useMemo(() => regionPoolNote(filters), [filters])
 
   const handleDecide = () => {
     if (!pool.length) {
@@ -93,6 +96,10 @@ export default function RandomPage() {
           <span>
             {relaxations.length ? (
               <span>想更快吃到？点一下就能放宽某一个条件（忌口不会被改动）：</span>
+            ) : regionNote ? (
+              <span>
+                当前主要是忌口或地点限制导致没有候选。两者都不会被自动放宽，你可以自行调整。
+              </span>
             ) : (
               <span>
                 当前主要是忌口限制导致没有候选。忌口不会被自动放宽，你可以自行调整。
@@ -100,6 +107,13 @@ export default function RandomPage() {
             )}
           </span>
         </div>
+      ) : null}
+
+      {pool.length === 0 && regionNote ? (
+        <p className="pool-hint" role="status">
+          <span aria-hidden="true">🌏</span>
+          <span>{regionNote}</span>
+        </p>
       ) : null}
 
       {pool.length === 0 && relaxations.length ? (

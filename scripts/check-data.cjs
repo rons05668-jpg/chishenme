@@ -99,6 +99,7 @@ async function main() {
     CATEGORIES,
     TASTES,
     SCENES,
+    REGIONS,
     BUDGETS,
     SHORT_NAMES,
     shortName,
@@ -115,7 +116,7 @@ async function main() {
     buildWheelPool,
   } = pickerMod
 
-  const { DEFAULT_FILTERS, toPickerFilters } = filtersMod
+  const { DEFAULT_FILTERS, toPickerFilters, normalizeFilters } = filtersMod
 
   const budgetByKey = (key) => BUDGETS.find((item) => item.key === key)
   const defaultPickerFilters = toPickerFilters(DEFAULT_FILTERS)
@@ -124,7 +125,8 @@ async function main() {
 
   check('01 食物条目数与名称无重复', () => {
     assert(Number.isInteger(FOODS.length), 'FOODS 不是数组')
-    assert(FOODS.length === 249, `期望 249 条：实际 ${FOODS.length} 条`)
+    // 249 条国内条目 + 100 条「纽约·Parsons」条目
+    assert(FOODS.length === 349, `期望 349 条：实际 ${FOODS.length} 条`)
     assert(new Set(FOODS.map((f) => f.name.trim())).size === FOODS.length, '存在重复名称')
     assert(CATEGORIES.length === 11, '应有 11 个食物类型')
     return `${FOODS.length} 条`
@@ -183,6 +185,61 @@ async function main() {
     return `枚举范围内（${CATEGORIES.length} 类 / ${TASTES.length} 味 / ${SCENES.length} 场景）`
   })
 
+  check('04b region / address 合法且地点筛选语义正确', () => {
+    const regionKeys = new Set(REGIONS.map((item) => item.key))
+    const problems = []
+    for (const food of FOODS) {
+      if (food.region !== undefined) {
+        // 国内条目一律**不写** region（留空即默认），显式写 'local' 属于冗余，直接拦下
+        if (food.region === 'local') problems.push(`${food.id} 显式写了 region:'local'，国内条目应留空`)
+        else if (!regionKeys.has(food.region)) problems.push(`${food.id} 的 region「${food.region}」不在 REGIONS 枚举内`)
+      }
+      // address 是可选的；一旦出现就必须是非空字符串
+      if (food.address !== undefined && !isNonEmptyString(food.address)) {
+        problems.push(`${food.id} 的 address 存在但不是非空字符串`)
+      }
+      // 海外条目必须带地址，否则用户拿到推荐也找不到店
+      if (food.region && !isNonEmptyString(food.address)) {
+        problems.push(`${food.id} 是海外条目（${food.region}）但缺少 address`)
+      }
+    }
+    assert(problems.length === 0, problems.slice(0, 5).join('；'))
+
+    // 筛选语义：平时只出未标注地点的条目；具体地点只出该地点的条目
+    const localPool = filterFoods({ region: 'local' })
+    const overseasPools = REGIONS.filter((item) => item.key !== 'local').map((item) => ({
+      item,
+      pool: filterFoods({ region: item.key }),
+    }))
+    assert(localPool.length > 0, '「平时」候选池为空')
+    assert(localPool.every((food) => !food.region), '「平时」混入了标注了地点的条目')
+
+    for (const { item, pool } of overseasPools) {
+      assert(pool.length > 0, `地点「${item.label}」候选池为空，枚举里不应挂空地点`)
+      assert(pool.every((food) => food.region === item.key), `地点「${item.label}」混入了其他地点的条目`)
+      assert(pool.every((food) => isNonEmptyString(food.address)), `地点「${item.label}」存在无地址的条目`)
+    }
+
+    // 各地点池两两互斥，且并集等于全量
+    const pools = [localPool, ...overseasPools.map((entry) => entry.pool)]
+    const total = pools.reduce((sum, pool) => sum + pool.length, 0)
+    assert(total === FOODS.length, `各地点池并集 ${total} ≠ 全量 ${FOODS.length}（存在既不属于任何地点、又未被「平时」收录的条目）`)
+    const idSet = new Set()
+    for (const pool of pools) {
+      for (const food of pool) {
+        assert(!idSet.has(food.id), `条目 ${food.id} 同时出现在多个地点池中`)
+        idSet.add(food.id)
+      }
+    }
+
+    // 不传 region / 传「随机」时不限制地点
+    assert(filterFoods({}).length === FOODS.length, '不传 region 时未返回全量')
+    assert(filterFoods({ region: '随机' }).length === FOODS.length, 'region=随机 时未返回全量')
+
+    const summary = overseasPools.map((entry) => `${entry.item.label}=${entry.pool.length}`).join('、')
+    return `平时 ${localPool.length} 条 / ${summary}，两两互斥且并集为全量`
+  })
+
   check('05 FOOD_MAP 与 getFoodById 一致', () => {
     const mapKeys = Object.keys(FOOD_MAP)
     assert(mapKeys.length === FOODS.length, `FOOD_MAP 键数 ${mapKeys.length} ≠ FOODS 长度 ${FOODS.length}`)
@@ -214,11 +271,18 @@ async function main() {
 
   /* ------------------------- 算法正确性 ------------------------- */
 
-  check('07 默认筛选返回全部食物', () => {
+  check('07 默认筛选返回全部「平时」食物', () => {
     const all = filterFoods(defaultPickerFilters)
-    assert(all.length === FOODS.length, `返回 ${all.length} 条，期望 ${FOODS.length} 条`)
-    assert(sameIdSet(all, FOODS), '返回结果与 FOODS 集合不一致')
-    return `${all.length} 条 = 全量`
+    // 默认筛选里 region === 'local'，因此默认池 = 未标注地点的国内条目（海外条目被排除）
+    const local = FOODS.filter((food) => !food.region)
+    assert(all.length === local.length, `返回 ${all.length} 条，期望「平时」${local.length} 条`)
+    assert(sameIdSet(all, local), '返回结果与「平时」集合不一致')
+
+    // 只有显式不限制地点时才是全量
+    const everything = filterFoods({ ...defaultPickerFilters, region: undefined })
+    assert(everything.length === FOODS.length, `不限地点应返回 ${FOODS.length} 条，实际 ${everything.length} 条`)
+    assert(sameIdSet(everything, FOODS), '不限地点时返回结果与 FOODS 集合不一致')
+    return `平时 ${all.length} 条；不限地点 ${everything.length} 条 = 全量`
   })
 
   check('08 按 category / taste 筛选结果纯净', () => {
@@ -486,7 +550,11 @@ async function main() {
 
     // 空 / 非对象 / 缺字段：全部回退到默认值
     const empty = normalizeFilterPrefs(null)
-    assert(Object.keys(empty).length === 6, 'normalizeFilterPrefs 结果字段数应为 6')
+    // 字段数直接对齐 filters.js 的默认值，避免以后再加维度时漏改这里的硬编码数字
+    assert(
+      Object.keys(empty).length === Object.keys(DEFAULT_FILTERS).length,
+      `normalizeFilterPrefs 结果字段数应为 ${Object.keys(DEFAULT_FILTERS).length}`,
+    )
     for (const key of Object.keys(DEFAULT_FILTER_PREFS)) {
       assert(empty[key] === DEFAULT_FILTER_PREFS[key], `缺省时 ${key} 应回退默认值，实际 ${empty[key]}`)
     }
@@ -523,6 +591,40 @@ async function main() {
     assert(wrongTypes.scene === DEFAULT_FILTER_PREFS.scene, '对象类型未回退')
 
     return '默认回退、非法枚举回退、合法值保留、类型错误容错'
+  })
+
+  check('22b 筛选偏好的两套实现字段与默认值一致', () => {
+    /*
+     * lib/filters.js 的 DEFAULT_FILTERS / normalizeFilters 与
+     * lib/storage.js 的 DEFAULT_FILTER_PREFS / normalizeFilterPrefs 是两份平行实现。
+     * 历史上新增 region 时只改了前者，导致从 localStorage 读回的偏好把 region 丢掉、
+     * 默认地点静默失效（界面默认选中「平时」但实际不筛选地点）。这里锁死一致性。
+     */
+    const { normalizeFilterPrefs, DEFAULT_FILTER_PREFS } = storage
+
+    const filtersKeys = Object.keys(DEFAULT_FILTERS).sort()
+    const prefsKeys = Object.keys(DEFAULT_FILTER_PREFS).sort()
+    assert(
+      filtersKeys.join(',') === prefsKeys.join(','),
+      `字段集合不一致：filters=[${filtersKeys}] storage=[${prefsKeys}]`,
+    )
+
+    const mismatched = filtersKeys.filter((key) => DEFAULT_FILTERS[key] !== DEFAULT_FILTER_PREFS[key])
+    assert(mismatched.length === 0, `默认值不一致：${mismatched.map((key) => `${key}(${DEFAULT_FILTERS[key]} vs ${DEFAULT_FILTER_PREFS[key]})`).join('、')}`)
+
+    // 两边对同一份非法输入必须给出完全相同的回退结果
+    const dirty = { budgetKey: '不存在', taste: '甜', category: '甜品', scene: '堂食', cuisine: '法餐', meal: '宵夜', region: 'paris-fr' }
+    assert(
+      JSON.stringify(normalizeFilters(dirty)) === JSON.stringify(normalizeFilterPrefs(dirty)),
+      '对同一份非法输入的规整结果不一致',
+    )
+    assert(normalizeFilterPrefs({}).region === DEFAULT_FILTERS.region, '缺 region 时未回退到默认地点')
+
+    // 合法地点必须被保留，不能像旧版那样被整个丢掉
+    assert(normalizeFilterPrefs({ region: 'parsons-nyc' }).region === 'parsons-nyc', '合法 region 未被保留')
+    assert(normalizeFilters({ region: 'parsons-nyc' }).region === 'parsons-nyc', '合法 region 未被保留')
+
+    return `${filtersKeys.length} 个字段与默认值一致，非法输入回退结果一致`
   })
 
   check('23 备份导出结构与格式版本', () => {

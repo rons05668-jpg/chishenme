@@ -5,7 +5,7 @@ import ResultSheet from '../components/ResultSheet'
 import TopBar from '../components/TopBar'
 import Wheel from '../components/Wheel'
 import FoodResultCard from '../components/FoodResultCard'
-import { suggestRelaxations, summarizeFilters, toPickerFilters } from '../lib/filters'
+import { regionPoolNote, suggestRelaxations, summarizeFilters, toPickerFilters } from '../lib/filters'
 import { buildWheelPool, filterFoods } from '../lib/picker'
 import useMediaQuery from '../hooks/useMediaQuery'
 import { useAppState } from '../state/AppState'
@@ -49,6 +49,18 @@ export default function WheelPage() {
     () => suggestRelaxations(filters, (next) => filterFoods(toPickerFilters({ ...next, exclusions })).length),
     [filters, exclusions]
   )
+
+  /**
+   * 地点维度的补充说明：切到「纽约·Parsons」这类外地时，候选池天然远小于「平时」，
+   * 空态里必须说清原因，否则用户会以为数据丢了。「平时」下为空串，不干扰原文案。
+   */
+  const regionNote = useMemo(() => regionPoolNote(filters), [filters])
+
+  const emptyBlockerText = relaxations.length
+    ? '放宽下面任意一个条件，转盘就能转起来（忌口不会被改动）。'
+    : regionNote
+      ? '当前主要是忌口或地点限制导致没有候选。两者都不会被自动放宽，你可以自行调整。'
+      : '当前主要是忌口限制导致没有候选。忌口不会被自动放宽，你可以自行调整。'
 
   const handleResult = (food) => setSheetFood(food)
 
@@ -138,15 +150,13 @@ export default function WheelPage() {
       {items.length === 0 ? (
         <div className="empty" role="status">
           <span className="empty__title">没有符合条件的食物</span>
-          <span className="empty__text">
-            {relaxations.length
-              ? '放宽下面任意一个条件，转盘就能转起来（忌口不会被改动）。'
-              : '当前主要是忌口限制导致没有候选。忌口不会被自动放宽，你可以自行调整。'}
-          </span>
+          <span className="empty__text">{emptyBlockerText}</span>
+          {regionNote ? <span className="empty__text">{regionNote}</span> : null}
         </div>
       ) : items.length === 1 ? (
         <>
           <p className="pool-hint">只有一个候选，就选它吧。</p>
+          {regionNote ? <p className="pool-hint">{regionNote}</p> : null}
           <FoodResultCard food={items[0]} onEat={handleEat} onReroll={handleNewBatch} onDislike={handleDislike} />
         </>
       ) : <Wheel

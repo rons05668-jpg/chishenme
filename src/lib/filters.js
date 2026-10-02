@@ -2,7 +2,7 @@
  * 筛选条件的默认值、转换与「摘要 / 放宽建议」工具
  */
 
-import { BUDGETS, CATEGORIES, CUISINES, MEALS, SCENES, TASTES } from '../data/foods'
+import { BUDGETS, CATEGORIES, CUISINES, MEALS, REGIONS, SCENES, TASTES } from '../data/foods'
 
 export const DEFAULT_FILTERS = {
   budgetKey: 'any',
@@ -11,10 +11,12 @@ export const DEFAULT_FILTERS = {
   scene: '随机',
   cuisine: '随机',
   meal: '随机',
+  // 地点默认「平时」（国内条目）。国内随机永远不出海外店铺。
+  region: 'local',
 }
 
 /** 除忌口外的「普通筛选」字段，重置时只清这些，不动忌口 */
-export const NORMAL_FILTER_KEYS = ['budgetKey', 'taste', 'category', 'scene', 'cuisine', 'meal']
+export const NORMAL_FILTER_KEYS = ['budgetKey', 'taste', 'category', 'scene', 'cuisine', 'meal', 'region']
 
 /** 各字段对应的中文名，用于摘要与放宽建议文案 */
 const FIELD_LABELS = {
@@ -24,6 +26,7 @@ const FIELD_LABELS = {
   scene: '场景',
   cuisine: '风味',
   meal: '时段',
+  region: '地点',
 }
 
 /** 把 UI 上的筛选状态转换成推荐算法需要的结构 */
@@ -35,6 +38,7 @@ export function toPickerFilters(filters) {
     scene: filters.scene,
     cuisine: filters.cuisine,
     meal: filters.meal,
+    region: filters.region,
     exclusions: filters.exclusions || [],
   }
 }
@@ -43,6 +47,8 @@ export function toPickerFilters(filters) {
 export function isFilterActive(key, filters) {
   if (!filters) return false
   if (key === 'budgetKey') return filters.budgetKey && filters.budgetKey !== 'any'
+  // 「平时」是地点维度的默认值，与预算的 'any' 同构，不算已限制条件
+  if (key === 'region') return Boolean(filters.region) && filters.region !== DEFAULT_FILTERS.region
   return filters[key] && filters[key] !== '随机'
 }
 
@@ -56,6 +62,11 @@ function valueLabel(key, filters) {
   if (key === 'budgetKey') {
     const budget = BUDGETS.find((item) => item.key === filters.budgetKey)
     return budget ? budget.label : '不限'
+  }
+  // 地点存的是 key，展示要用中文 label（如 parsons-nyc → 纽约·Parsons）
+  if (key === 'region') {
+    const region = REGIONS.find((item) => item.key === filters.region)
+    return region ? region.label : DEFAULT_FILTERS.region
   }
   return filters[key]
 }
@@ -152,6 +163,7 @@ export function suggestRelaxations(filters, countFor) {
 export function normalizeFilters(raw) {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   const budgetKeys = BUDGETS.map((item) => item.key)
+  const regionKeys = REGIONS.map((item) => item.key)
   const pick = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback)
   return {
     budgetKey: pick(source.budgetKey, budgetKeys, DEFAULT_FILTERS.budgetKey),
@@ -160,5 +172,22 @@ export function normalizeFilters(raw) {
     scene: pick(source.scene, [...SCENES, '随机'], DEFAULT_FILTERS.scene),
     cuisine: pick(source.cuisine, [...CUISINES, '随机'], DEFAULT_FILTERS.cuisine),
     meal: pick(source.meal, [...MEALS, '随机'], DEFAULT_FILTERS.meal),
+    // 旧数据没有 region 字段，pick 会落到 'local'，因此老用户偏好零迁移
+    region: pick(source.region, regionKeys, DEFAULT_FILTERS.region),
   }
+}
+
+/**
+ * 零候选 / 候选过少时的地点维度补充说明。
+ * ------------------------------------------------------------------
+ * 切到海外地点后候选池天然比「平时」小得多，用户很容易误以为数据丢了，
+ * 这里显式说明原因，并给出「切回平时」这个可行动作。
+ * 「平时」下返回空串，不干扰原有文案。
+ */
+export function regionPoolNote(filters) {
+  const key = filters?.region
+  if (!key || key === DEFAULT_FILTERS.region) return ''
+  const region = REGIONS.find((item) => item.key === key)
+  if (!region) return ''
+  return `当前地点是「${region.label}」，可选店铺本来就比「平时」少；放宽其他条件或切回「平时」都能增加候选。`
 }

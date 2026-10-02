@@ -2,6 +2,21 @@ import { test, expect } from '@playwright/test'
 import { FOODS, CATEGORIES, TASTES, CUISINES, MEALS } from '../src/data/foods.js'
 
 /**
+ * 「平时」（默认地点）下真正参与推荐的池子。
+ * ------------------------------------------------------------------
+ * 默认筛选里 region === 'local'，会把所有标注了地点的海外条目排除在外，
+ * 因此凡是假设「UI 默认池 = FOODS 全量」的用例，都必须基于这份数据构造场景，
+ * 否则算出来的候选数会比界面上的多，用例会假性失败。
+ */
+const LOCAL_FOODS = FOODS.filter((food) => !food.region)
+
+/** 纽约·Parsons 池子（region === 'parsons-nyc'） */
+const NYC_FOODS = FOODS.filter((food) => food.region === 'parsons-nyc')
+
+/** 纽约店的店名集合，用于判断结果卡片当前展示的是不是纽约店 */
+const NYC_NAME_SET = new Set(NYC_FOODS.map((food) => food.name))
+
+/**
  * 选项定位器。
  * 注意：手机视口（iPhone 13，390px）下 FilterPanel 处于 compact 模式，
  * 「风味 / 时段 / 忌口」被折叠在 .filter-more 之后，使用前需先展开。
@@ -102,7 +117,7 @@ test('筛选变化后旧结果立即失效', async ({ page }) => {
 test('转盘单候选直接展示，双候选旋转并禁用修改', async ({ page }) => {
   const find = (count) => {
     for (const category of CATEGORIES) for (const taste of TASTES) for (const cuisine of CUISINES) for (const meal of MEALS) {
-      const foods = FOODS.filter((f) => f.category === category && f.taste === taste && f.cuisines.includes(cuisine) && f.meals.includes(meal))
+      const foods = LOCAL_FOODS.filter((f) => f.category === category && f.taste === taste && f.cuisines.includes(cuisine) && f.meals.includes(meal))
       if (foods.length === count) return { category, taste, cuisine, meal, foods }
     }
     throw new Error('无测试候选')
@@ -356,7 +371,7 @@ test('转盘结果弹窗：Esc 关闭、焦点限制与背景滚动锁定', asyn
   // 直接构造一个必出结果的转盘场景（双候选）
   const find = (count) => {
     for (const category of CATEGORIES) for (const taste of TASTES) for (const cuisine of CUISINES) for (const meal of MEALS) {
-      const foods = FOODS.filter((f) => f.category === category && f.taste === taste && f.cuisines.includes(cuisine) && f.meals.includes(meal))
+      const foods = LOCAL_FOODS.filter((f) => f.category === category && f.taste === taste && f.cuisines.includes(cuisine) && f.meals.includes(meal))
       if (foods.length === count) return { category, taste, cuisine, meal }
     }
     throw new Error('无测试候选')
@@ -610,4 +625,96 @@ test('饮料页：离线（SW 缓存）仍可随机推荐', async ({ page, conte
   await page.getByRole('button', { name: '帮我选一杯', exact: false }).click()
   await expect(page.locator('.result-card')).toBeVisible()
   await context.setOffline(false)
+})
+
+/* ==================================================================== */
+/* 地点（region）维度                                                     */
+/* ==================================================================== */
+
+test('地点筛选：默认「平时」不出纽约店，切到纽约·Parsons 只出纽约店', async ({ page }) => {
+  // 一共 16 次抽取，每次都有 900ms 翻牌动画，默认 30s 不够用
+  test.setTimeout(90_000)
+
+  // 两池都要有货，否则下面的断言没有意义
+  expect(LOCAL_FOODS.length).toBeGreaterThan(0)
+  expect(NYC_FOODS.length).toBeGreaterThan(0)
+
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+
+  await page.goto('/#/random')
+  await page.reload()
+
+  // 默认地点必须是「平时」
+  await expect(option(page, '地点', '平时')).toHaveAttribute('aria-pressed', 'true')
+  await expect(option(page, '地点', '纽约·Parsons')).toHaveAttribute('aria-pressed', 'false')
+
+  // 默认筛选随机多次，结果里不允许出现任何纽约店
+  for (let i = 0; i < 8; i += 1) {
+    await page.getByRole('button', { name: '帮我决定' }).click()
+    await expect(page.locator('.result-card')).toBeVisible()
+    const name = (await page.locator('.result-card__name').innerText()).trim()
+    expect(NYC_NAME_SET.has(name), `「平时」抽到了纽约店：${name}`).toBe(false)
+  }
+
+  // 切到纽约·Parsons：之后只会出纽约店
+  await option(page, '地点', '纽约·Parsons').click()
+  await expect(option(page, '地点', '纽约·Parsons')).toHaveAttribute('aria-pressed', 'true')
+
+  for (let i = 0; i < 8; i += 1) {
+    await page.getByRole('button', { name: '帮我决定' }).click()
+    await expect(page.locator('.result-card')).toBeVisible()
+    const name = (await page.locator('.result-card__name').innerText()).trim()
+    expect(NYC_NAME_SET.has(name), `纽约地点抽到了非纽约店：${name}`).toBe(true)
+    // 纽约店的文案里必须带完整地址，否则用户找不到店
+    await expect(page.locator('.result-card__desc')).toContainText('New York, NY')
+  }
+
+  expect(errors).toEqual([])
+})
+
+test('地点为纽约时，预算 / 口味 / 忌口同样生效，且重置会回到平时', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+
+  await page.goto('/#/random')
+  await page.reload()
+  await option(page, '地点', '纽约·Parsons').click()
+
+  // 候选数应等于纽约池规模
+  await expect(page.locator('.pool-hint strong').first()).toHaveText(String(NYC_FOODS.length))
+
+  // 预算同样作用于纽约店。matchBudget 是「价格区间与档位区间求交集」的口径：
+  // 纽约店人均普遍高于「20元以内」，但确实有个别单片披萨落在该档位，
+  // 因此按数据算出期望值，而不是假设一定清零。
+  const cheapNycCount = NYC_FOODS.filter((food) => food.price[0] <= 20).length
+  expect(cheapNycCount).toBeLessThan(NYC_FOODS.length)
+  await option(page, '预算', '20元以内').click()
+  await expect(page.locator('.pool-hint strong').first()).toHaveText(String(cheapNycCount))
+
+  // 放宽预算后恢复
+  await option(page, '预算', '不限').click()
+  await expect(page.locator('.pool-hint strong').first()).toHaveText(String(NYC_FOODS.length))
+
+  // 口味同样作用于纽约店：候选数应精确等于该口味的纽约店数量
+  const spicyNyc = NYC_FOODS.filter((food) => food.taste === '辣').length
+  expect(spicyNyc).toBeGreaterThan(0)
+  await option(page, '口味', '辣').click()
+  await expect(page.locator('.pool-hint strong').first()).toHaveText(String(spicyNyc))
+
+  // 忌口同样作用于纽约店：纽约的辣味条目都带「辣」忌口标签 → 结果必须清零，
+  // 并给出可点击的放宽建议（建议里不会包含放宽忌口）
+  await expandMore(page)
+  await option(page, '忌口', '不吃辣').click()
+  await expect(page.locator('.pool-hint strong').first()).toHaveText('0')
+  await expect(page.getByRole('button', { name: '帮我决定' })).toBeDisabled()
+  await expect(page.locator('.relax-list')).toBeVisible()
+
+  // 「重置筛选」会连地点一起清回「平时」，但不动忌口
+  await page.getByRole('button', { name: '重置筛选（保留忌口）' }).click()
+  await expect(option(page, '地点', '平时')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.pool-hint strong').first()).toHaveText(String(LOCAL_FOODS.length - LOCAL_FOODS.filter((food) => food.exclusions.includes('辣') || food.uncertainExclusions.includes('辣')).length))
+  await expect(option(page, '忌口', '不吃辣')).toHaveAttribute('aria-pressed', 'true')
+
+  expect(errors).toEqual([])
 })

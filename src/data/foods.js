@@ -11,6 +11,8 @@
  *  exclusions / uncertainExclusions 常见 / 需确认的忌口配料
  *  taste    清淡 / 微辣 / 辣 / 重口
  *  scenes   适合场景：食堂 / 外卖 / 出去吃
+ *  region   可选。地点 key（见 REGIONS）；不填 = 国内默认（「平时」）
+ *  address  可选。海外条目的完整地址字符串，与 region 配套出现
  *  desc     一句话描述（结果卡片展示）
  */
 
@@ -22,6 +24,19 @@ export const MEALS = ['早餐', '午餐', '晚餐', '下午茶', '夜宵']
 export const EXCLUSIONS = ['香菜', '内脏', '鱼虾贝类', '辣']
 export const TASTES = ['清淡', '微辣', '辣', '重口']
 export const SCENES = ['食堂', '外卖', '出去吃']
+
+/**
+ * 地点维度。
+ * ------------------------------------------------------------------
+ * `local` 是默认值，代表「平时」——即所有未标注 region 的国内条目。
+ * 条目上的 region 字段是**可选**的：不填即为国内条目，老数据零改动。
+ * 新增海外地点时，只需在这里追加一项，并在条目上写同名 key。
+ */
+export const REGIONS = [
+  { key: 'local', label: '平时' },
+  { key: 'parsons-nyc', label: '纽约·Parsons' },
+]
+
 export const BUDGETS = [
   { key: 'any', label: '不限', min: 0, max: Infinity },
   { key: 'cheap', label: '20元以内', min: 0, max: 20 },

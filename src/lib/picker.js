@@ -1,7 +1,7 @@
 /**
  * 推荐核心逻辑
  * ------------------------------------------------------------------
- * 1. filterFoods  按预算 / 口味 / 类型 / 场景做条件筛选
+ * 1. filterFoods  按地点 / 预算 / 口味 / 类型 / 场景 / 风味 / 时段做条件筛选
  * 2. buildWeights 依据「最近吃过」「本次不喜欢」「收藏」计算权重
  * 3. pickFood     加权随机抽取一个结果
  * 4. sampleFoods  加权不放回抽样，用于生成转盘候选
@@ -17,9 +17,18 @@ export function respectsExclusions(food, exclusions = []) {
 }
 
 export function filterFoods(filters = {}) {
-  const { budget, taste, category, scene, cuisine, meal, exclusions = [] } = filters
+  const { budget, taste, category, scene, cuisine, meal, region, exclusions = [] } = filters
   return FOODS.filter((food) => {
     if (!respectsExclusions(food, exclusions)) return false
+    // 地点维度：
+    //  - 'local'（平时）只保留**未标注地点**的条目 —— 国内随机永远不出纽约店
+    //  - 具体地点 key 只保留该地点的条目
+    //  - 未传 / '随机' 则不限制地点
+    if (region === 'local') {
+      if (food.region) return false
+    } else if (region && region !== '随机' && food.region !== region) {
+      return false
+    }
     if (cuisine && cuisine !== '随机' && !food.cuisines.includes(cuisine)) return false
     if (meal && meal !== '随机' && !food.meals.includes(meal)) return false
     if (!matchBudget(food, budget)) return false

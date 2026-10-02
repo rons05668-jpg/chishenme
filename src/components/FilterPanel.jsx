@@ -1,20 +1,21 @@
 import { memo, useId, useState } from 'react'
-import { BUDGETS, CUISINES, MEALS, EXCLUSIONS } from '../data/foods'
+import { BUDGETS, CUISINES, MEALS, EXCLUSIONS, REGIONS } from '../data/foods'
 import { useAppState } from '../state/AppState'
 import { CATEGORY_OPTIONS, SCENE_OPTIONS, TASTE_OPTIONS } from '../lib/content'
 import { DEFAULT_FILTERS, NORMAL_FILTER_KEYS, describeActiveFilters } from '../lib/filters'
 import OptionGroup from './OptionGroup'
 
 const BUDGET_OPTIONS = BUDGETS.map((item) => ({ value: item.key, label: item.label }))
+const REGION_OPTIONS = REGIONS.map((item) => ({ value: item.key, label: item.label }))
 
 /** 无操作兜底：父级尚未接入重置逻辑时也不会报错 */
 const noop = () => {}
 
 /**
- * 条件筛选面板：预算 / 口味 / 类型 / 场景 / 风味 / 时段 / 忌口
+ * 条件筛选面板：地点 / 预算 / 口味 / 类型 / 场景 / 风味 / 时段 / 忌口
  * ------------------------------------------------------------------
  * props 契约（筛选状态由父级持有，本组件不读 AppState 里的 filters）：
- *  - filters      { budgetKey, taste, category, scene, cuisine, meal }
+ *  - filters      { region, budgetKey, taste, category, scene, cuisine, meal }
  *  - onChange     增量补丁，由父级用函数式更新合并，保证连点不互相覆盖
  *  - onReset      重置「普通筛选」，由父级实现（父级保证不动忌口）
  *  - disabled     面板整体禁用
@@ -73,7 +74,7 @@ function FilterPanel({
           className="btn btn--sm btn--ghost filter-reset"
           onClick={onReset}
           disabled={!hasActive}
-          title="只清除预算 / 口味 / 类型 / 场景 / 风味 / 时段，不吃标签会保留"
+          title="只清除地点 / 预算 / 口味 / 类型 / 场景 / 风味 / 时段，不吃标签会保留"
         >
           重置筛选（保留忌口）
         </button>
@@ -89,6 +90,13 @@ function FilterPanel({
       ) : null}
 
       <div className="filter-panel__main">
+        <OptionGroup
+          icon="🌏"
+          label="地点"
+          options={REGION_OPTIONS}
+          value={safeFilters.region}
+          onChange={(region) => onChange({ region })}
+        />
         <OptionGroup
           icon="💰"
           label="预算"

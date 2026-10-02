@@ -10,7 +10,7 @@
  * 4. 提供带格式版本的备份导出与导入，导入只做「合并去重」，绝不静默删除已有有效数据。
  */
 
-import { BUDGETS, CATEGORIES, CUISINES, EXCLUSIONS, MEALS, SCENES, TASTES, getFoodById } from '../data/foods'
+import { BUDGETS, CATEGORIES, CUISINES, EXCLUSIONS, MEALS, REGIONS, SCENES, TASTES, getFoodById } from '../data/foods'
 import { BRANDS } from '../data/brands'
 import {
   CAFFEINE_LEVELS,
@@ -297,14 +297,21 @@ export const DEFAULT_FILTER_PREFS = Object.freeze({
   scene: '随机',
   cuisine: '随机',
   meal: '随机',
+  region: 'local',
 })
 
 const BUDGET_KEYS = BUDGETS.map((item) => item.key)
+const REGION_KEYS = REGIONS.map((item) => item.key)
 
 /**
  * 校验并规整筛选偏好。
  * 旧版本数据可能缺字段、字段类型不对、或枚举值已废弃，
  * 这里逐字段校验，非法值一律回退到默认值，保证结果永远是合法对象。
+ *
+ * ⚠️ 本函数与 lib/filters.js 的 normalizeFilters 是**两份平行实现**，
+ * 字段集合必须始终一致。历史上新增 region 时只改了 filters.js 而漏掉这里，
+ * 导致从 localStorage 读回偏好后 region 被整个丢掉、默认地点失效。
+ * check:data 的第 22b 项专门锁死两者的字段与默认值一致，请勿只改一边。
  */
 export function normalizeFilterPrefs(raw) {
   const source = isPlainObject(raw) ? raw : {}
@@ -319,6 +326,8 @@ export function normalizeFilterPrefs(raw) {
     scene: normalizeEnum(source.scene, [...SCENES, '随机'], DEFAULT_FILTER_PREFS.scene),
     cuisine: normalizeEnum(source.cuisine, [...CUISINES, '随机'], DEFAULT_FILTER_PREFS.cuisine),
     meal: normalizeEnum(source.meal, [...MEALS, '随机'], DEFAULT_FILTER_PREFS.meal),
+    // 旧数据没有 region，normalizeEnum 会回退到 'local'，老用户偏好零迁移
+    region: normalizeEnum(source.region, REGION_KEYS, DEFAULT_FILTER_PREFS.region),
   }
 }
 

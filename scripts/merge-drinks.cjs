@@ -192,6 +192,14 @@ for (const source of SOURCES) {
 
 console.log(`\n合计 ${collected.length} 条`)
 
+// 空输入保护：SOURCES 全是本机硬编码路径，换台机器会全部 [skip]。
+// 此时 collected 为空，若继续往下跑会把 DRINKS_RAW 替换成空数组，
+// 一次误操作就清空全部饮品数据。直接报错退出。
+if (!collected.length) {
+  console.error('merge-drinks: 没有收集到任何输入，拒绝清空 DRINKS_RAW')
+  process.exit(1)
+}
+
 /* ---------------------- 校验 ---------------------- */
 
 const ids = new Set()
@@ -201,7 +209,11 @@ const normalized = []
 for (const raw of collected) {
   const d = normalize(raw)
   if (!d.id || !d.id.startsWith('drink-')) problems.push(`id 不规范: ${d.id}`)
-  if (ids.has(d.id)) problems.push(`id 重复: ${d.id}`)
+  if (ids.has(d.id)) {
+    // 真去重：保留第一条，剔除重复项并在 warning 里列出被剔除的 id
+    problems.push(`id 重复，已剔除: ${d.id}`)
+    continue
+  }
   ids.add(d.id)
   if (!d.brandId) problems.push(`缺 brandId: ${d.id}`)
   if (!d.name) problems.push(`缺 name: ${d.id}`)

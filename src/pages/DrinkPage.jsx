@@ -365,6 +365,7 @@ export default function DrinkPage() {
       <ResultSheet
         open={Boolean(sheetDrink)}
         onClose={closeSheet}
+        title="饮品转盘结果"
         dismissLabel="先不喝，我再想想"
         card={
           sheetDrink ? (

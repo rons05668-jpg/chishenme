@@ -137,7 +137,7 @@ function ResultCardBody({
   return (
     <>
       {header}
-      {eyebrow ? <p className="result-card__eyebrow">{eyebrow}</p> : null}
+      {eyebrow ? <p className="result-card__eyebrow">{renderLabel(eyebrow)}</p> : null}
 
       <motion.div
         key={item.id}

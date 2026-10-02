@@ -84,6 +84,7 @@ export default function BackupPanel() {
           title: '导入完成',
           lines: [
             `新增 历史 ${added.history || 0} 条 / 收藏 ${added.favorites || 0} 个 / 忌口 ${added.exclusions || 0} 项`,
+            `新增 饮料历史 ${added.drinkHistory || 0} 条 / 饮料收藏 ${added.drinkFavorites || 0} 个 / 饮料忌口 ${added.drinkExclusions || 0} 项`,
             ...(res.warnings || []),
           ],
         })

@@ -1,7 +1,15 @@
 /* 今天吃什么？ —— 简易离线缓存 Service Worker
-   策略：静态资源优先走缓存，后台顺带更新；导航请求离线时回退到首页。 */
+   策略：静态资源优先走缓存，后台顺带更新；导航请求离线时回退到首页。
 
-const CACHE = 'tqsc-cache-v2'
+   版本机制：BUILD_ID 由构建脚本 scripts/gen-precache.cjs 注入
+   （dist/assets 文件名列表的 sha1 前 10 位，随内容变化而变化）。
+   CACHE 名随构建变化 → 浏览器靠 sw.js 字节比对发现新版本并重新 install；
+   activate 时删除所有旧版本缓存，避免带哈希的 chunk 无限堆积。
+   注意：vite dev 直接 serving public/sw.js 时占位符原样存在，
+   CACHE 名就是字面量 'tqsc-cache-__BUILD_ID__'，开发模式可接受。 */
+
+const BUILD_ID = '__BUILD_ID__'
+const CACHE = `tqsc-cache-${BUILD_ID}`
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/apple-touch-icon.png']
 
@@ -87,7 +95,18 @@ self.addEventListener('fetch', (event) => {
           }
           return response
         })
-        .catch(() => caches.match('/index.html').then((cached) => cached || caches.match('/')))
+        .catch(async () => {
+          // 离线兜底：导航请求永远返回一个 Response，
+          // 绝不 respondWith(undefined)（会导致整页白屏）。
+          const cached = (await caches.match('/index.html')) || (await caches.match('/'))
+          return (
+            cached ||
+            new Response('离线时无法加载页面，请检查网络后重试', {
+              status: 503,
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            })
+          )
+        })
     )
     return
   }
@@ -104,7 +123,8 @@ self.addEventListener('fetch', (event) => {
           }
           return response
         })
-        .catch(() => cached)
+        // 缓存和网络都没有：返回 503 而不是 undefined，避免白屏
+        .catch(() => cached || new Response('offline', { status: 503 }))
       return cached || network
     })
   )

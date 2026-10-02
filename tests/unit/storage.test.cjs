@@ -279,3 +279,41 @@ test('createDrinkHistoryRecord：uid 唯一，sweetness 缺失不抛错', () => 
   const record = storage.createDrinkHistoryRecord({ id: 'd1', name: 'x', category: '奶茶' })
   assert.equal(record.taste, null)
 })
+
+test('parseBackup：偏好/统计字段类型错误时视为缺失并警告，不静默覆盖', () => {
+  const raw = JSON.stringify({
+    app: 'today-eat-what',
+    formatVersion: 2,
+    exportedAt: new Date().toISOString(),
+    data: {
+      history: [],
+      favorites: [],
+      exclusions: [],
+      filterPrefs: '辣', // 应为对象
+      stats: 123, // 应为对象
+      drinkPrefs: ['随机'], // 应为对象
+      drinkStats: null, // null 视为缺失（JSON 里写不出 undefined）
+    },
+  })
+  const parsed = storage.parseBackup(raw)
+  assert.equal(parsed.ok, true)
+  // 类型错误的字段 present 为 false：importBackup 不会用洗成默认值的数据覆盖用户当前值
+  assert.equal(parsed.present.filterPrefs, false)
+  assert.equal(parsed.present.stats, false)
+  assert.equal(parsed.present.drinkPrefs, false)
+  assert.equal(parsed.present.drinkStats, false)
+  // 每条都有警告，用户能看到"已跳过（保留当前…）"
+  for (const keyword of ['筛选偏好', '统计', '饮料筛选偏好', '饮料统计']) {
+    assert.ok(
+      parsed.warnings.some((w) => w.includes(keyword)),
+      `缺少关于「${keyword}」的警告`
+    )
+  }
+})
+
+test('normalizeStats：totalDecided 封顶 1e6，避免首页显示 1e+30', () => {
+  assert.equal(storage.normalizeStats({ totalDecided: 1e30, firstUsedAt: null }).totalDecided, 1e6)
+  assert.equal(storage.normalizeDrinkStats({ totalDecided: 1e30, firstUsedAt: null }).totalDecided, 1e6)
+  // 正常值不受影响
+  assert.equal(storage.normalizeStats({ totalDecided: 42, firstUsedAt: null }).totalDecided, 42)
+})

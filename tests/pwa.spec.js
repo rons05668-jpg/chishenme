@@ -61,12 +61,12 @@ test.describe('PWA（webkit）', () => {
       })
       .toBe(true)
 
-    // 3. 伪造一个「新版本」SW（CACHE 名不同即视为新版本），触发 update
-    let cacheName = 'tqsc-cache-v99-test'
+    // 3. 伪造一个「新版本」SW（BUILD_ID 不同即 CACHE 名不同，浏览器视为新版本），触发 update
+    let buildId = 'test-build-v99'
     await page.route('**/sw.js', (route) =>
       route.fulfill({
         contentType: 'application/javascript',
-        body: swSource().replaceAll('tqsc-cache-v2', cacheName),
+        body: swSource().replaceAll('__BUILD_ID__', buildId),
       })
     )
     await page.evaluate(() => navigator.serviceWorker.getRegistration().then((reg) => reg.update()))
@@ -83,7 +83,7 @@ test.describe('PWA（webkit）', () => {
     await expect(banner).toBeHidden()
 
     // 6. 又来一个新版本：横幅重新出现（新版本不受旧「稍后」影响）
-    cacheName = 'tqsc-cache-v100-test'
+    buildId = 'test-build-v100'
     await page.evaluate(() => navigator.serviceWorker.getRegistration().then((reg) => reg.update()))
     await expect(banner).toBeVisible({ timeout: 20000 })
 

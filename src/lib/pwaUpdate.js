@@ -59,9 +59,13 @@ export function isPwaUpdateReady() {
  * 首次安装时 navigator.serviceWorker.controller 从无到有也会触发 controllerchange，
  * 若不加区分地 reload，用户第一次打开页面就会被无故刷新一次。
  * 只有「发现新版本 + 用户点了立即刷新」才允许重载。
+ * 单次消费语义：返回 true 的同时清零，避免之后非用户触发的
+ * controllerchange 造成无意义重载。
  */
 export function shouldReloadOnControllerChange() {
-  return userApproved
+  if (!userApproved) return false
+  userApproved = false
+  return true
 }
 
 /**

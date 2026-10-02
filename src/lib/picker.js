@@ -122,9 +122,12 @@ export function shuffle(list) {
 }
 
 /**
- * 转盘只从严格筛选结果中抽取；保留旧参数签名供现有调用使用。
+ * 转盘只从严格筛选结果中抽取（不补入条件外的食物）。
+ * @param {object} filters   picker 结构筛选条件
+ * @param {object} context   { history, dislikes, favorites }
+ * @param {number} maxCount  最多返回的候选数量
  */
-export function buildWheelPool(filters = {}, context = {}, _minCount = 8, maxCount = 12) {
+export function buildWheelPool(filters = {}, context = {}, maxCount = 12) {
   const primary = filterFoods(filters)
   return sampleFoods(primary, Math.min(maxCount, primary.length), context)
 }

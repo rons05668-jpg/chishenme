@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import FilterPanel from '../components/FilterPanel'
 import ResultSheet from '../components/ResultSheet'
@@ -10,7 +10,6 @@ import { buildWheelPool, filterFoods } from '../lib/picker'
 import useMediaQuery from '../hooks/useMediaQuery'
 import { useAppState } from '../state/AppState'
 
-const MIN_SEGMENTS = 8
 const MAX_SEGMENTS = 10
 
 export default function WheelPage() {
@@ -37,7 +36,8 @@ export default function WheelPage() {
   }, [context])
 
   const items = useMemo(
-    () => buildWheelPool(pickerFilters, contextRef.current, MIN_SEGMENTS, MAX_SEGMENTS),
+    () => buildWheelPool(pickerFilters, contextRef.current, MAX_SEGMENTS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- batch 是有意的「换一批」触发器，不参与计算但必须作为依赖
     [pickerFilters, batch]
   )
 

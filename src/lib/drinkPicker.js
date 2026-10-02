@@ -219,9 +219,12 @@ export function sampleDrinks(pool, count, context = {}) {
 
 /**
  * 转盘只从严格筛选结果中抽取；条件外的饮料一律不补入。
- * 结果不足 minCount 时也不放宽，宁可转盘扇区少一些。
+ * 候选不足时也不放宽，宁可转盘扇区少一些。
+ * @param {object} filters   picker 结构筛选条件
+ * @param {object} context   { history, dislikes, favorites }
+ * @param {number} maxCount  最多返回的候选数量
  */
-export function buildDrinkWheelPool(filters = {}, context = {}, minCount = 8, maxCount = 10) {
+export function buildDrinkWheelPool(filters = {}, context = {}, maxCount = 10) {
   const primary = filterDrinks(filters)
   return sampleDrinksByBrand(primary, Math.min(maxCount, primary.length), context)
 }

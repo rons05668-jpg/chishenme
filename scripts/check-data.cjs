@@ -756,14 +756,10 @@ async function main() {
   const { BRANDS, BRAND_MAP, AVAILABILITY_LEVELS } = brandsMod
   const {
     DRINKS,
-    DRINK_MAP,
     DRINK_CATEGORIES,
     TEMPERATURES,
     SUGAR_LEVELS,
     CAFFEINE_LEVELS,
-    DRINK_EXCLUSIONS,
-    getDrinkById,
-    matchDrinkBudget,
   } = drinksMod
   const { filterDrinks, pickDrinkByBrand, buildDrinkWheelPool, isRecommendable } = drinkPicker
 
@@ -1026,15 +1022,15 @@ async function main() {
 
     // 转盘候选必须全部来自严格筛选结果
     const filters = { exclusions: [] }
-    const wheel = buildDrinkWheelPool(filters, {}, 8, 10)
+    const wheel = buildDrinkWheelPool(filters, {}, 10)
     const strict = new Set(filterDrinks(filters).map((d) => d.id))
     const intruder = wheel.filter((d) => !strict.has(d.id))
     assert(intruder.length === 0, `转盘补入了条件外饮品：${intruder.map((d) => d.id).join(', ')}`)
     assert(wheel.length <= 10, `转盘候选超过上限：${wheel.length}`)
 
-    // 候选充足时不应少于下限
+    // 候选充足时必须取满上限，不因候选多就少给
     const strictCount = strict.size
-    if (strictCount >= 8) {
+    if (strictCount >= 10) {
       assert(wheel.length === Math.min(10, strictCount), `转盘候选数异常：${wheel.length}，期望 ${Math.min(10, strictCount)}`)
     }
 

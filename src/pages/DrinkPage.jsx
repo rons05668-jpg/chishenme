@@ -27,7 +27,6 @@ import { useAppState } from '../state/AppState'
  * 玩法：随机（加权抽取）+ 转盘（严格候选），与食物页一致。
  */
 
-const MIN_SEGMENTS = 8
 const MAX_SEGMENTS = 10
 
 export default function DrinkPage() {
@@ -105,7 +104,7 @@ export default function DrinkPage() {
 
   // 转盘候选：严格筛选，绝不补入条件外饮品
   const wheelItems = useMemo(
-    () => (mode === 'wheel' ? buildDrinkWheelPool(pickerFilters, context, MIN_SEGMENTS, MAX_SEGMENTS) : []),
+    () => (mode === 'wheel' ? buildDrinkWheelPool(pickerFilters, context, MAX_SEGMENTS) : []),
     [mode, pickerFilters, context]
   )
 

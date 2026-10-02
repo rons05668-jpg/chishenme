@@ -155,6 +155,7 @@ export default function Wheel({
     if (spinSignal === signalRef.current) return
     signalRef.current = spinSignal
     spin()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 有意省略 spin，见上方说明
   }, [spinSignal])
 
   return (

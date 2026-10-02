@@ -7,16 +7,35 @@ const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg',
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then(async (cache) => {
-        // 首次访问的 JS/CSS 在注册 SW 之前已加载，必须主动预缓存才能首次安装后离线使用。
-        const response = await fetch('/index.html', { cache: 'reload' })
-        if (!response.ok) throw new Error('离线页面预缓存失败')
-        const html = await response.text()
-        const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1])
-        await cache.addAll([...PRECACHE, ...assets])
+    caches.open(CACHE).then(async (cache) => {
+      /*
+       * 分两段预缓存，避免「一颗老鼠屎坏一锅汤」：
+       *
+       * 第一段 —— 核心资源（首页、manifest、图标）：离线可用的底线，
+       * 用 addAll 一次性写入，任一失败即抛错，让本次 install 失败并在下次访问时重试。
+       *
+       * 第二段 —— 构建产物（带内容哈希的 /assets/*.js|css）：从 index.html 正则解析得到。
+       * 这些文件名每次构建都会变，数量也随代码增长，此前与核心资源混在同一个 addAll 里，
+       * 任一资源 404 或网络抖动都会让整个 install 失败 —— SW 装不上，离线功能全灭。
+       * 现在改为逐个缓存：单个失败只 console.warn 跳过，不影响 SW 安装成功。
+       */
+      await cache.addAll(PRECACHE)
+
+      // 首次访问的 JS/CSS 在注册 SW 之前已加载，必须主动预缓存才能首次安装后离线使用。
+      const response = await fetch('/index.html', { cache: 'reload' })
+      if (!response.ok) throw new Error('离线页面预缓存失败')
+      const html = await response.text()
+      const assets = [...new Set(
+        [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1])
+      )]
+
+      const results = await Promise.allSettled(assets.map((asset) => cache.add(asset)))
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn('[sw] 构建产物预缓存失败，已跳过：', assets[index], result.reason)
+        }
       })
+    })
   )
 })
 

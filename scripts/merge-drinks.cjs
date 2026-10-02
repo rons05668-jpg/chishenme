@@ -185,7 +185,6 @@ for (const source of SOURCES) {
   }
   const text = fs.readFileSync(source.file, 'utf8')
   const literal = extractArray(text, source.varName)
-  // eslint-disable-next-line no-new-func
   const list = new Function(`return ${literal}`)()
   console.log(`[load] ${source.label}: ${list.length} 条`)
   collected.push(...list)

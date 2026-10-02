@@ -7,7 +7,14 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="theme-color" content="#FFF8F2" />
+    <!-- 深色模式下用主题里的暖黑（--text #241D19），避免工具栏与页面撞成生硬的黑白 -->
+    <meta name="theme-color" content="#241D19" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="今天吃什么？随机抽一个，或者转个盘交给命运。" />
+
+    <!-- 分享卡片 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="今天吃什么？" />
+    <meta property="og:description" content="今天吃什么？随机抽一个，或者转个盘交给命运。" />
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />

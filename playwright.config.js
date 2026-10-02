@@ -2,6 +2,12 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  /*
+   * 只认 *.spec.js。
+   * tests/unit/ 下是 Node 自带 node:test 的单元测试（*.test.cjs），
+   * 若沿用 Playwright 默认的 testMatch（含 *.test.*），两者会互相误抓。
+   */
+  testMatch: '**/*.spec.js',
   workers: 1,
   timeout: 30000,
   /*

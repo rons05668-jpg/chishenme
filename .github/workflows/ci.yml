@@ -15,8 +15,16 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run check:data
+      - run: npm run test:unit
       - run: npm audit --audit-level=moderate
       - run: npm run build
+      # 浏览器缓存 key 绑定 package-lock.json 哈希：依赖没变就直接命中，避免每次重下
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      # 只装 chromium：e2e 用例全部跑在 chromium 上，装 firefox/webkit 纯属浪费
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

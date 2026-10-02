@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -28,3 +31,23 @@ jobs:
       # 只装 chromium：e2e 用例全部跑在 chromium 上，装 firefox/webkit 纯属浪费
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=chromium
+      
+# PWA 专项（webkit）：README 明确主目标是 iPhone 主屏，
+# Safari 的 SW 安装 / 离线 / 更新提示需要单独覆盖
+pwa-webkit:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+    - run: npm ci
+    - run: npm run build
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+    - run: npx playwright install --with-deps webkit
+    - run: npx playwright test --project=webkit
+

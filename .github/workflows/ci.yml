@@ -24,7 +24,7 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run build
       # 浏览器缓存 key 绑定 package-lock.json 哈希：依赖没变就直接命中，避免每次重下
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
@@ -43,7 +43,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
